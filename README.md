@@ -2,6 +2,10 @@
 
 **FlowDesk** is aimed at becoming a **modern order-management and trading workspace**: one place to watch **live order flow**, manage lifecycle (submit, amend, cancel), see **P&L and exposure**, drill into a **field-level audit trail**, and layer **AI and natural language** on top—always anchored to structured, verifiable facts from the book, not hand-wavy guesses.
 
+![FlowDesk landing page](screens/home-page.png)
+
+![FlowDesk workspace — blotter, order entry, stats, audit trail](screens/blotter.png)
+
 **Where this repo is headed**
 
 - **Real connectivity** — authenticated APIs and WebSockets for orders, fills, and reference data; server-side validation, idempotent submits, and durable history.  
