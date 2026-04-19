@@ -4,11 +4,11 @@
  * Why does it use the same types as the real stream? So the store and table work identically in production.
  * How would you swap it for a real WebSocket? Replace the adapter, nothing else changes.
  */
+import { createClientOrderId, createOrderId } from '../ids'
 import {
   type BlotterStreamEvent,
   type Order,
   type OrderId,
-  orderId,
   streamSequence,
 } from '../types'
 
@@ -47,18 +47,13 @@ function pickSymbol(rnd: () => number): string {
   return SYMBOLS[Math.floor(rnd() * SYMBOLS.length)]!
 }
 
-function nextOrderId(counter: { n: number }): OrderId {
-  counter.n += 1
-  return orderId(`ord_mock_${counter.n}`)
-}
-
 function buildOrder(rnd: () => number, id: OrderId): Order {
   const t = isoNow()
   const quantity = (Math.floor(rnd() * 50) + 1) * 100
   const limitPrice = Math.round((rnd() * 400 + 20) * 100) / 100
   return {
     id,
-    clientOrderId: `cl_${id}`,
+    clientOrderId: createClientOrderId(rnd),
     symbol: pickSymbol(rnd),
     side: rnd() > 0.5 ? 'buy' : 'sell',
     quantity,
@@ -99,7 +94,8 @@ function emitHeartbeat(state: EmitterState, onEvent: (e: BlotterStreamEvent) => 
 }
 
 function emitCreated(state: EmitterState, onEvent: (e: BlotterStreamEvent) => void) {
-  const id = nextOrderId(state.orderCounter)
+  state.orderCounter.n += 1
+  const id = createOrderId(state.rnd)
   const order = buildOrder(state.rnd, id)
   state.live.set(id, order)
   onEvent({

@@ -12,9 +12,9 @@ createRoot(document.getElementById('root')!).render(
       token: {
         colorPrimary: '#4f46e5',
         colorInfo: '#6366f1',
-        colorBgLayout: '#111111',
-        colorBgContainer: '#161618',
-        colorBgElevated: '#1c1c22',
+        colorBgLayout: '#0b0f19',
+        colorBgContainer: '#12151c',
+        colorBgElevated: '#161b22',
         colorBorder: 'rgba(255, 255, 255, 0.08)',
         colorBorderSecondary: 'rgba(255, 255, 255, 0.06)',
         colorText: 'rgba(255, 255, 255, 0.92)',

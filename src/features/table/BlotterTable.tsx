@@ -1,14 +1,20 @@
-import { Table, Tag, message } from 'antd'
+import { Menu, Table, Tag } from 'antd'
 import type { TableColumnsType, TableProps } from 'antd'
 import type { ColumnType } from 'antd/es/table'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { Key, ReactNode } from 'react'
+import { isOrderOpenForAction } from '../blotter/api/orderActions'
 import type { Order, OrderStatus } from '../blotter/types'
 
 export type BlotterTableProps = {
   data: Order[]
   selectedRowKeys: Key[]
   onSelectedRowKeysChange: (keys: Key[]) => void
+  /** Invoked after the row is selected; used for summarize / amend flows. */
+  onRowContextSummarize?: (orderId: string) => void
+  onRowContextCancel?: (orderId: string) => void | Promise<void>
+  onRowContextAmend?: (orderId: string) => void
 }
 
 type SortKind = 'string' | 'number' | 'date'
@@ -134,14 +140,58 @@ function renderPnlCell(record: Order) {
   return <span className={cls}>{pnlMoney.format(v)}</span>
 }
 
+const ORDER_ID_DISPLAY_MAX = 16
+const CLIENT_ID_DISPLAY_MAX = 18
+
+function truncateIdDisplay(full: string, maxLen: number): string {
+  if (full.length <= maxLen) return full
+  const inner = maxLen - 1
+  const left = Math.ceil(inner / 2)
+  const right = Math.floor(inner / 2)
+  return `${full.slice(0, left)}…${full.slice(-right)}`
+}
+
+function renderOrderIdCell(record: Order) {
+  const full = String(record.id)
+  return (
+    <span className="blotter-id-cell" title={full}>
+      {truncateIdDisplay(full, ORDER_ID_DISPLAY_MAX)}
+    </span>
+  )
+}
+
+function renderClientIdCell(record: Order) {
+  const full = record.clientOrderId ?? '—'
+  return (
+    <span className="blotter-id-cell" title={full}>
+      {truncateIdDisplay(full, CLIENT_ID_DISPLAY_MAX)}
+    </span>
+  )
+}
+
 /** Column groups: references → stock → price → execution fills → status/route → timestamps */
 const columnGroups: { title: string; key: string; columns: ColumnSpec[] }[] = [
   {
     title: 'References',
     key: 'refs',
     columns: [
-      { title: 'Order ID', dataIndex: 'id', kind: 'string', ellipsis: true, width: 138, fixed: 'left' },
-      { title: 'Client ID', dataIndex: 'clientOrderId', kind: 'string', ellipsis: true, width: 118 },
+      {
+        title: 'Order ID',
+        dataIndex: 'id',
+        kind: 'string',
+        ellipsis: true,
+        width: 132,
+        fixed: 'left',
+        render: renderOrderIdCell,
+      },
+      {
+        title: 'Client ID',
+        dataIndex: 'clientOrderId',
+        kind: 'string',
+        ellipsis: true,
+        width: 128,
+        render: renderClientIdCell,
+      },
       { title: 'Account', dataIndex: 'account', kind: 'string', ellipsis: true, width: 100 },
       { title: 'Counterparty', dataIndex: 'counterparty', kind: 'string', ellipsis: true, width: 100 },
     ],
@@ -152,20 +202,50 @@ const columnGroups: { title: string; key: string; columns: ColumnSpec[] }[] = [
     columns: [
       { title: 'Symbol', dataIndex: 'symbol', kind: 'string', width: 120, fixed: 'left' },
       {
-        title: 'Side',
+        title: (
+          <span className="blotter-col-head-ellipsis" title="Side">
+            Side
+          </span>
+        ),
         dataIndex: 'side',
         kind: 'string',
         width: 78,
-        render: (record) => <Tag color={record.side === 'buy' ? 'green' : 'red'}>{record.side.toUpperCase()}</Tag>,
+        ellipsis: true,
+        render: (record) => (
+          <div className="blotter-side-cell">
+            <Tag color={record.side === 'buy' ? 'green' : 'red'}>{record.side.toUpperCase()}</Tag>
+          </div>
+        ),
       },
-      { title: 'Quantity', dataIndex: 'quantity', kind: 'number', width: 96 },
+      {
+        title: (
+          <span className="blotter-col-head-ellipsis" title="Quantity">
+            Quantity
+          </span>
+        ),
+        dataIndex: 'quantity',
+        kind: 'number',
+        width: 96,
+        ellipsis: true,
+      },
     ],
   },
   {
     title: 'Price',
     key: 'price',
     columns: [
-      { title: 'Limit Price', dataIndex: 'limitPrice', kind: 'number', width: 118, flashField: 'limitPrice' },
+      {
+        title: (
+          <span className="blotter-col-head-ellipsis" title="Limit Price">
+            Limit Price
+          </span>
+        ),
+        dataIndex: 'limitPrice',
+        kind: 'number',
+        width: 118,
+        flashField: 'limitPrice',
+        ellipsis: true,
+      },
       {
         title: 'Avg Fill Px',
         dataIndex: 'averageFillPrice',
@@ -260,17 +340,32 @@ function flashKey(orderId: Order['id'], field: FlashField): string {
   return `${orderId}:${field}`
 }
 
-export default function BlotterTable({ data, selectedRowKeys, onSelectedRowKeysChange }: BlotterTableProps) {
+export default function BlotterTable({
+  data,
+  selectedRowKeys,
+  onSelectedRowKeysChange,
+  onRowContextSummarize,
+  onRowContextCancel,
+  onRowContextAmend,
+}: BlotterTableProps) {
   const [flashByCell, setFlashByCell] = useState<Record<string, FlashDirection>>({})
   const prevPriceByCellRef = useRef<Map<string, number | undefined>>(new Map())
   const flashTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const [rowContextMenu, setRowContextMenu] = useState<{ x: number; y: number; record: Order } | null>(null)
 
-  const handleRowClick = (record: Order) => {
-    console.log('Clicked row:', record)
-    console.table(record)
-    console.error('Row click event fired for:', record.id)
-    void message.info(`Clicked ${record.id}`, 1)
-  }
+  useEffect(() => {
+    if (!rowContextMenu) return
+    const close = () => setRowContextMenu(null)
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('scroll', close, true)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('scroll', close, true)
+    }
+  }, [rowContextMenu])
 
   useEffect(() => {
     const nextPriceByCell = new Map<string, number | undefined>()
@@ -339,45 +434,100 @@ export default function BlotterTable({ data, selectedRowKeys, onSelectedRowKeysC
       fixed: 'left',
       columnWidth: 56,
       selectedRowKeys,
-      onChange: (keys, selectedRows) => {
+      onChange: (keys) => {
         onSelectedRowKeysChange(keys)
-        console.log('Checkbox selection changed. Selected rows:', selectedRows)
-        console.table(selectedRows)
-      },
-      onSelect: (record, selected) => {
-        console.log(`Checkbox ${selected ? 'selected' : 'deselected'} row:`, record)
       },
       preserveSelectedRowKeys: true,
     }),
     [selectedRowKeys, onSelectedRowKeysChange],
   )
 
+  const contextRecord = rowContextMenu?.record
+  const canActOnOpenOrder = contextRecord ? isOrderOpenForAction(contextRecord) : false
+
   return (
-    <Table<Order>
-      className="blotter-table"
-      rowKey="id"
-      rowSelection={rowSelection}
-      onRow={(record) => ({
-        onClick: () => handleRowClick(record),
-      })}
-      columns={columns}
-      dataSource={data}
-      footer={() => (
-        <div className="blotter-table-footer">
-          <div className="blotter-table-footer__stat">
-            <span className="blotter-table-footer__label">Visible rows</span>
-            <span className="blotter-table-footer__value">{data.length}</span>
+    <>
+      <Table<Order>
+        className="blotter-table"
+        rowKey="id"
+        rowSelection={rowSelection}
+        onRow={(record) => ({
+          onContextMenu: (e) => {
+            e.preventDefault()
+            onSelectedRowKeysChange([record.id])
+            setRowContextMenu({ x: e.clientX, y: e.clientY, record })
+          },
+        })}
+        columns={columns}
+        dataSource={data}
+        footer={() => (
+          <div className="blotter-table-footer">
+            <div className="blotter-table-footer__stat">
+              <span className="blotter-table-footer__label">Visible rows</span>
+              <span className="blotter-table-footer__value">{data.length}</span>
+            </div>
+            <div className="blotter-table-footer__stat">
+              <span className="blotter-table-footer__label">Selected rows</span>
+              <span className="blotter-table-footer__value">{selectedRowKeys.length}</span>
+            </div>
           </div>
-          <div className="blotter-table-footer__stat">
-            <span className="blotter-table-footer__label">Selected rows</span>
-            <span className="blotter-table-footer__value">{selectedRowKeys.length}</span>
-          </div>
-        </div>
-      )}
-      pagination={false}
-      virtual
-      scroll={{ x: 1900, y: 520 }}
-      size="small"
-    />
+        )}
+        pagination={false}
+        virtual
+        scroll={{ x: 1900, y: 520 }}
+        size="small"
+      />
+      {rowContextMenu &&
+        createPortal(
+          <>
+            <div
+              className="blotter-context-menu-backdrop"
+              aria-hidden
+              onClick={() => setRowContextMenu(null)}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                setRowContextMenu(null)
+              }}
+            />
+            <div
+              className="blotter-context-menu"
+              style={{ left: rowContextMenu.x, top: rowContextMenu.y }}
+              role="menu"
+            >
+              <Menu
+                className="blotter-context-menu__inner"
+                selectable={false}
+                items={[
+                  {
+                    key: 'summarize',
+                    label: 'Summarize selected rows',
+                    disabled: !onRowContextSummarize,
+                  },
+                  {
+                    key: 'cancel',
+                    label: 'Cancel',
+                    danger: true,
+                    disabled: !onRowContextCancel || !canActOnOpenOrder,
+                  },
+                  {
+                    key: 'amend',
+                    label: 'Amend',
+                    disabled: !onRowContextAmend || !canActOnOpenOrder,
+                  },
+                ]}
+                onClick={({ key, domEvent }) => {
+                  domEvent.stopPropagation()
+                  const id = rowContextMenu.record.id
+                  setRowContextMenu(null)
+                  if (key === 'summarize') void onRowContextSummarize?.(id)
+                  if (key === 'cancel') void onRowContextCancel?.(id)
+                  if (key === 'amend') onRowContextAmend?.(id)
+                }}
+              />
+            </div>
+          </>,
+          document.body,
+        )}
+    </>
   )
 }

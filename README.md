@@ -1,6 +1,17 @@
-# Prime Blotter
+# FlowDesk
 
-Order-blotter UI with live-style mock events, normalized orders in **Zustand**, and **Ant Design** tables (orders + dummy audit trail). Built with **Vite**, **React**, and **TypeScript**.
+**FlowDesk** is aimed at becoming a **modern order-management and trading workspace**: one place to watch **live order flow**, manage lifecycle (submit, amend, cancel), see **P&L and exposure**, drill into a **field-level audit trail**, and layer **AI and natural language** on top—always anchored to structured, verifiable facts from the book, not hand-wavy guesses.
+
+**Where this repo is headed**
+
+- **Real connectivity** — authenticated APIs and WebSockets for orders, fills, and reference data; server-side validation, idempotent submits, and durable history.  
+- **Desk-grade UX** — fast virtualized blotters, saved layouts, alerts, and workflows that match how PMs and traders actually work.  
+- **Compliance and ops** — immutable-style audit narratives, exportable trails, and clear separation between **deterministic metrics** and **optional LLM prose**.  
+- **AI as an assistant** — row summaries, EOD narratives, and NLP filters that consume **typed facts** from the store (summaries, selections, aggregates) so outputs stay checkable against the grid.
+
+**What ships today**
+
+A **demo workspace** with a marketing **landing page**, a **dark Ant Design** shell, a **typed blotter domain** in **Zustand**, mock **real-time-style** stream events, virtualized **tables**, **order entry**, **stats / NLP filter UI**, and an **order → event audit tree** wired to the same ingestion path—built with **Vite**, **React**, and **TypeScript**.
 
 ## Stack
 
@@ -15,7 +26,7 @@ npm install
 npm run dev
 ```
 
-Other scripts: `npm run build`, `npm run lint`, `npm run preview`.
+Open `/` for the landing experience, `/app` for the FlowDesk workspace. Other scripts: `npm run build`, `npm run lint`, `npm run preview`.
 
 ## Features covered
 
@@ -24,6 +35,7 @@ Other scripts: `npm run build`, `npm run lint`, `npm run preview`.
 - [x] **Dual entry of orders** — configurable mock emitter plus delayed `submitOrder` API; both emit `order_created` / updates into the store  
 - [x] **Blotter table UX** — sort & column filters, virtual scroll, grouped headers, fixed selection + key reference columns, P&L column  
 - [x] **Order ticket & layout** — Ant `Form` + validation, collapsible order column (preference persisted in `localStorage`), stats strip  
+- [x] **Audit trail** — tree of stream-derived audit entries per order (see store + mapper)  
 
 ## Production hardening (todo)
 
@@ -47,10 +59,12 @@ Other scripts: `npm run build`, `npm run lint`, `npm run preview`.
 
 | Area | Path |
 |------|------|
-| App shell (header, form, cards) | `src/App.tsx`, `src/App.css` |
+| Router (landing vs workspace) | `src/App.tsx` |
+| Landing page | `src/features/landing/HomePage.tsx`, `HomePage.css` |
+| Workspace shell (header, stats, form, cards) | `src/PrimeBlotterApp.tsx`, `src/App.css` |
 | Mock stream hook | `src/features/blotter/realtime/useBlotterMockStream.ts` |
 | Stream + event types | `src/features/blotter/types.ts`, `src/features/blotter/realtime/mockOrderStream.ts` |
 | Store | `src/features/blotter/store/useBlotterStore.ts` |
 | Order table | `src/features/table/BlotterTable.tsx` |
-| Audit table (static rows) | `src/features/table/AuditTrailTable.tsx` |
+| Audit trail (tree) | `src/features/table/AuditTrailTable.tsx`, `src/features/blotter/audit/` |
 | Deterministic insights + modals (AI hooks later) | `src/features/insights/deterministicInsights.ts`, `src/features/insights/InsightModals.tsx` |

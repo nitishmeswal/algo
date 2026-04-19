@@ -1,6 +1,6 @@
+import { createClientOrderId, createOrderId } from '../ids'
 import { useBlotterStore } from '../store/useBlotterStore'
 import {
-  orderId,
   streamSequence,
   type Order,
   type OrderCreatedEvent,
@@ -35,10 +35,11 @@ function nextSequence() {
 
 function buildOrder(payload: OrderEntryPayload): Order {
   const t = isoNow()
-  const id = orderId(`ord_form_${Date.now()}`)
+  const rnd = () => Math.random()
+  const id = createOrderId(rnd)
   return {
     id,
-    clientOrderId: `cl_${id}`,
+    clientOrderId: createClientOrderId(rnd),
     symbol: payload.symbol.trim().toUpperCase(),
     side: payload.side,
     quantity: payload.quantity,
