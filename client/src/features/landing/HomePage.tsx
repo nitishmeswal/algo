@@ -28,10 +28,6 @@ function HeroDashboardMock() {
           <span className="landing-hero-mock__metric-label">Total P&amp;L</span>
           <span className="landing-hero-mock__metric-value landing-hero-mock__metric-value--green">+$12,847</span>
         </div>
-        <div className="landing-hero-mock__metric">
-          <span className="landing-hero-mock__metric-label">Risk exposure</span>
-          <span className="landing-hero-mock__metric-value landing-hero-mock__metric-value--risk">$2.47M</span>
-        </div>
       </div>
       <div className="landing-hero-mock__chart">
         <svg className="landing-hero-mock__svg" viewBox="0 0 400 140" preserveAspectRatio="none">

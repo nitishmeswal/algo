@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Key } from 'react'
 import { Avatar, Button, Card, Dropdown, Input, Layout, Menu, Space, Typography, message } from 'antd'
 import { useBlotterMockStream } from './features/blotter/realtime/useBlotterMockStream'
+import { useBlotterWebSocketStream } from './features/blotter/realtime/useBlotterWebSocketStream'
 import OrderEntryForm from './features/order-entry/OrderEntryForm'
 import AmendOrderModal from './features/blotter/AmendOrderModal'
 import { amendOrder, cancelOrders, isOrderOpenForAction } from './features/blotter/api/orderActions'
@@ -23,6 +24,9 @@ import { Link } from 'react-router-dom'
 import './App.css'
 
 const ORDER_FORM_OPEN_KEY = 'prime-blotter-order-form-open'
+
+const BLOTTER_WS_URL = (import.meta.env.VITE_BLOTTER_WS_URL as string | undefined)?.trim() ?? ''
+const USE_BLOTTER_WEBSOCKET = BLOTTER_WS_URL.length > 0
 
 const DUMMY_DISPLAY_NAME = 'Chris Taylor'
 
@@ -69,7 +73,8 @@ function PrimeBlotterApp() {
     }
   }, [orderFormOpen])
 
-  useBlotterMockStream()
+  useBlotterWebSocketStream({ url: BLOTTER_WS_URL, enabled: USE_BLOTTER_WEBSOCKET })
+  useBlotterMockStream({ enabled: !USE_BLOTTER_WEBSOCKET })
   const orderIds = useBlotterStore((s) => s.orderIds)
   const ordersById = useBlotterStore((s) => s.ordersById)
   const lastBeat = useBlotterStore((s) => s.lastHeartbeatAt)

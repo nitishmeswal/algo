@@ -32,6 +32,23 @@ npm run dev
 
 Open `/` for the landing experience, `/app` for the FlowDesk workspace. Other scripts: `npm run build`, `npm run lint`, `npm run preview`.
 
+The React app lives under **`client/`** (`client/src`, `client/index.html`, `client/public`). Builds still emit to **`dist/`** at the repository root.
+
+### Stream server (Phase 1)
+
+Express + **`ws`** in **`server/`**: **`GET /health`**, WebSocket **`/blotter-stream`**, monotonic **`sequence`** per connection, one **JSON text frame** per message (`order_created` sample on connect, then **`heartbeat`** every 4s). **`GET /blotter-stream`** returns a small JSON hint (streams are **WebSocket**, not a normal HTTP page). With **`npm run dev`**, Vite proxies **`/blotter-stream`** to the stream server on **`3001`** (run **`npm run dev:server`** in another terminal).
+
+```bash
+cd server && npm install && npm run dev
+# other terminal:
+curl http://localhost:3001/health
+# optional: npx wscat -c ws://localhost:3001/blotter-stream
+```
+
+From the repo root you can run **`npm run dev:server`** (same as `npm run dev` inside `server/`). Override port with **`PORT`**.
+
+To drive the workspace from the stream server instead of the in-browser mock, set **`VITE_BLOTTER_WS_URL`** (see [`.env.example`](.env.example)), e.g. `ws://127.0.0.1:3001/blotter-stream`, or use the Vite dev proxy with **`ws://127.0.0.1:5173/blotter-stream`** while **`npm run dev`** and **`npm run dev:server`** are both running.
+
 ## Features covered
 
 - [x] **Typed blotter domain** — `Order`, branded ids, and discriminated `BlotterStreamEvent` shapes shared by mock stream and UI  
@@ -51,7 +68,7 @@ Open `/` for the landing experience, `/app` for the FlowDesk workspace. Other sc
 
 ## AI (todo)
 
-**Approach:** keep **deterministic facts** from the blotter (`src/features/insights/deterministicInsights.ts`) as the source of truth; add **LLM / NLP only as a prose layer** on top (or reject outputs that don’t align with those facts).
+**Approach:** keep **deterministic facts** from the blotter (`client/src/features/insights/deterministicInsights.ts`) as the source of truth; add **LLM / NLP only as a prose layer** on top (or reject outputs that don’t align with those facts).
 
 - [ ] **Insight cards** — optional AI rephrase of the two card bullet lists; inputs = same aggregates used today (exposure + lifecycle)  
 - [ ] **Summarize N rows** — call an API with `selectionSummaryFacts`-shaped JSON; return NL summary + optional Q&A; never invent rows outside the selection payload  
@@ -63,12 +80,14 @@ Open `/` for the landing experience, `/app` for the FlowDesk workspace. Other sc
 
 | Area | Path |
 |------|------|
-| Router (landing vs workspace) | `src/App.tsx` |
-| Landing page | `src/features/landing/HomePage.tsx`, `HomePage.css` |
-| Workspace shell (header, stats, form, cards) | `src/PrimeBlotterApp.tsx`, `src/App.css` |
-| Mock stream hook | `src/features/blotter/realtime/useBlotterMockStream.ts` |
-| Stream + event types | `src/features/blotter/types.ts`, `src/features/blotter/realtime/mockOrderStream.ts` |
-| Store | `src/features/blotter/store/useBlotterStore.ts` |
-| Order table | `src/features/table/BlotterTable.tsx` |
-| Audit trail (tree) | `src/features/table/AuditTrailTable.tsx`, `src/features/blotter/audit/` |
-| Deterministic insights + modals (AI hooks later) | `src/features/insights/deterministicInsights.ts`, `src/features/insights/InsightModals.tsx` |
+| Router (landing vs workspace) | `client/src/App.tsx` |
+| Landing page | `client/src/features/landing/HomePage.tsx`, `HomePage.css` |
+| Workspace shell (header, stats, form, cards) | `client/src/PrimeBlotterApp.tsx`, `client/src/App.css` |
+| Mock stream hook | `client/src/features/blotter/realtime/useBlotterMockStream.ts` |
+| Stream + event types | `client/src/features/blotter/types.ts`, `client/src/features/blotter/realtime/mockOrderStream.ts` |
+| Store | `client/src/features/blotter/store/useBlotterStore.ts` |
+| Order table | `client/src/features/table/BlotterTable.tsx` |
+| Audit trail (tree) | `client/src/features/table/AuditTrailTable.tsx`, `client/src/features/blotter/audit/` |
+| Deterministic insights + modals (AI hooks later) | `client/src/features/insights/deterministicInsights.ts`, `client/src/features/insights/InsightModals.tsx` |
+| Stream server (Express + ws, phase 1) | `server/src/index.ts` |
+| WebSocket client adapter + hook | `client/src/features/blotter/realtime/blotterWebSocketAdapter.ts`, `useBlotterWebSocketStream.ts` |

@@ -6,6 +6,8 @@ export type UseBlotterMockStreamOptions = {
   intervalMs?: number
   seed?: number
   maxEvents?: number
+  /** When false, no mock stream runs (use when a WebSocket feed is active). */
+  enabled?: boolean
 }
 
 /**
@@ -13,16 +15,20 @@ export type UseBlotterMockStreamOptions = {
  * Passes events into `useBlotterStore` — same wiring you would use for a WebSocket `onmessage`.
  */
 export function useBlotterMockStream(options: UseBlotterMockStreamOptions = {}): void {
+  const { enabled = true, intervalMs, seed, maxEvents } = options
   const ingestEvent = useBlotterStore((s) => s.ingestEvent)
 
   useEffect(() => {
+    if (!enabled) {
+      return
+    }
     const handle = createMockBlotterStream({
       onEvent: ingestEvent,
-      intervalMs: options.intervalMs,
-      seed: options.seed,
-      maxEvents: options.maxEvents,
+      intervalMs,
+      seed,
+      maxEvents,
     })
     handle.start()
     return () => handle.stop()
-  }, [ingestEvent, options.intervalMs, options.seed, options.maxEvents])
+  }, [enabled, ingestEvent, intervalMs, seed, maxEvents])
 }

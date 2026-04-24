@@ -139,6 +139,10 @@
     grid-template-columns: 1fr;
     padding-top: 32px;
   }
+
+  .landing-hero__visual {
+    justify-content: center;
+  }
 }
 
 .landing-hero__h1 {
@@ -228,9 +232,13 @@
 /* ——— Dashboard mock ——— */
 .landing-hero__visual {
   min-width: 0;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .landing-hero-mock {
+  width: 100%;
+  max-width: 380px;
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: linear-gradient(165deg, rgba(18, 21, 28, 0.98) 0%, rgba(10, 12, 18, 0.99) 100%);
@@ -261,7 +269,7 @@
 
 .landing-hero-mock__metrics {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
   margin-bottom: 16px;
 }
@@ -291,10 +299,6 @@
 
 .landing-hero-mock__metric-value--green {
   color: #34d399;
-}
-
-.landing-hero-mock__metric-value--risk {
-  color: #818cf8;
 }
 
 .landing-hero-mock__chart {
