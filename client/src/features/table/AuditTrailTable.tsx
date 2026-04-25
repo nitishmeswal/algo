@@ -1,105 +1,186 @@
-import { Empty, Tag, Tree } from 'antd'
-import type { DataNode } from 'antd/es/tree'
-import { useMemo } from 'react'
-import type { AuditTrailKind } from '../blotter/audit/types'
-import { useBlotterStore } from '../blotter/store/useBlotterStore'
-import type { Order, OrderStatus } from '../blotter/types'
+import { Table, Tag } from 'antd'
+import type { ColumnsType } from 'antd/es/table'
 
-const kindTagColor: Record<AuditTrailKind, string> = {
-  created: 'success',
-  updated: 'processing',
-  cancelled: 'default',
-  rejected: 'error',
+/** Mock rows for tree-shaped audit preview (not wired to the store yet). */
+type AuditMockRecord = {
+  key: string
+  time: string
+  event: string
+  summary: string
+  source: string
+  tagColor?: string
+  children?: AuditMockRecord[]
 }
 
-function formatAuditTime(iso: string): string {
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime())
-    ? iso
-    : d.toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
-}
+const MOCK_AUDIT_TREE: AuditMockRecord[] = [
+  {
+    key: 'mock-ord-1',
+    time: '—',
+    event: 'Order',
+    summary: 'MOCK-1042 · AAPL buy · working',
+    source: 'OMS',
+    tagColor: 'blue',
+    children: [
+      {
+        key: 'mock-ord-1-e1',
+        time: '09:14:02',
+        event: 'Created',
+        summary: 'New order accepted; routed to MOCK venue',
+        source: 'STREAM',
+        tagColor: 'success',
+      },
+      {
+        key: 'mock-ord-1-e2',
+        time: '09:14:03',
+        event: 'Updated',
+        summary: 'Venue acknowledgement',
+        source: 'ROUTER',
+        tagColor: 'processing',
+        children: [
+          {
+            key: 'mock-ord-1-e2-f1',
+            time: '09:14:03',
+            event: 'Field',
+            summary: 'venue_order_id: (empty) → VNE-778821',
+            source: 'ROUTER',
+            tagColor: 'default',
+          },
+          {
+            key: 'mock-ord-1-e2-f2',
+            time: '09:14:03',
+            event: 'Field',
+            summary: 'working_quantity: 0 → 500',
+            source: 'ROUTER',
+            tagColor: 'default',
+          },
+        ],
+      },
+      {
+        key: 'mock-ord-1-e3',
+        time: '09:18:41',
+        event: 'Updated',
+        summary: 'Client amend',
+        source: 'UI',
+        tagColor: 'processing',
+        children: [
+          {
+            key: 'mock-ord-1-e3-f1',
+            time: '09:18:41',
+            event: 'Field',
+            summary: 'quantity: 500 → 750',
+            source: 'UI',
+            tagColor: 'default',
+          },
+          {
+            key: 'mock-ord-1-e3-f2',
+            time: '09:18:41',
+            event: 'Field',
+            summary: 'limit_price: 178.50 → 178.00',
+            source: 'UI',
+            tagColor: 'default',
+          },
+        ],
+      },
+      {
+        key: 'mock-ord-1-e4',
+        time: '09:22:09',
+        event: 'Updated',
+        summary: 'Partial fill',
+        source: 'STREAM',
+        tagColor: 'processing',
+        children: [
+          {
+            key: 'mock-ord-1-e4-f1',
+            time: '09:22:09',
+            event: 'Field',
+            summary: 'filled_quantity: 0 → 200',
+            source: 'STREAM',
+            tagColor: 'default',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'mock-ord-2',
+    time: '—',
+    event: 'Order',
+    summary: 'MOCK-1043 · MSFT sell · cancelled',
+    source: 'OMS',
+    tagColor: 'blue',
+    children: [
+      {
+        key: 'mock-ord-2-e1',
+        time: '10:02:11',
+        event: 'Created',
+        summary: 'New order accepted',
+        source: 'STREAM',
+        tagColor: 'success',
+      },
+      {
+        key: 'mock-ord-2-e2',
+        time: '10:03:58',
+        event: 'Cancelled',
+        summary: 'User cancel; no fills',
+        source: 'UI',
+        tagColor: 'default',
+      },
+    ],
+  },
+]
 
-function formatStatusLabel(status: OrderStatus): string {
-  return status.replace(/_/g, ' ')
-}
-
-function orderTitle(order: Order | undefined, id: string) {
-  return (
-    <span className="audit-trail-tree__order-title">
-      <span className="audit-trail-tree__order-id">{id}</span>
-      {order ? (
-        <>
-          <span className="audit-trail-tree__order-meta">
-            {order.symbol} · {order.side.toUpperCase()}
-          </span>
-          <Tag className="audit-trail-tree__order-status" color="blue">
-            {formatStatusLabel(order.status)}
-          </Tag>
-        </>
-      ) : (
-        <span className="audit-trail-tree__order-meta">Unknown order</span>
-      )}
-    </span>
-  )
-}
+const columns: ColumnsType<AuditMockRecord> = [
+  {
+    title: 'Time',
+    dataIndex: 'time',
+    key: 'time',
+    width: 100,
+    render: (t: string) => (
+      <span className="audit-trail-table__mono">{t}</span>
+    ),
+  },
+  {
+    title: 'Event',
+    dataIndex: 'event',
+    key: 'event',
+    width: 110,
+    render: (ev: string, row) => (
+      <Tag className="audit-trail-table__event-tag" color={row.tagColor ?? 'default'}>
+        {ev}
+      </Tag>
+    ),
+  },
+  {
+    title: 'Summary',
+    dataIndex: 'summary',
+    key: 'summary',
+    ellipsis: true,
+  },
+  {
+    title: 'Source',
+    dataIndex: 'source',
+    key: 'source',
+    width: 100,
+    align: 'right',
+    render: (s: string) => <span className="audit-trail-table__source">{s}</span>,
+  },
+]
 
 export default function AuditTrailTable() {
-  const orderIds = useBlotterStore((s) => s.orderIds)
-  const ordersById = useBlotterStore((s) => s.ordersById)
-  const auditByOrderId = useBlotterStore((s) => s.auditByOrderId)
-
-  const treeData = useMemo<DataNode[]>(() => {
-    return orderIds.map((id) => {
-      const order = ordersById[id]
-      const entries = auditByOrderId[id] ?? []
-      return {
-        key: `order:${id}`,
-        title: orderTitle(order, id),
-        children:
-          entries.length === 0
-            ? [
-                {
-                  key: `order:${id}:empty`,
-                  title: <span className="audit-trail-tree__empty-leaf">No audit entries</span>,
-                  isLeaf: true,
-                },
-              ]
-            : entries.map((e) => ({
-                key: e.id,
-                isLeaf: true,
-                title: (
-                  <div className="audit-trail-tree__entry">
-                    <span className="audit-trail-tree__time">{formatAuditTime(e.emittedAt)}</span>
-                    <Tag className="audit-trail-tree__kind" color={kindTagColor[e.kind]}>
-                      {e.kind}
-                    </Tag>
-                    <span className="audit-trail-tree__summary">{e.summary}</span>
-                    <span className="audit-trail-tree__source">{e.source}</span>
-                  </div>
-                ),
-              })),
-      }
-    })
-  }, [orderIds, ordersById, auditByOrderId])
-
-  if (treeData.length === 0) {
-    return (
-      <Empty
-        className="audit-trail-empty"
-        description="No orders yet — audit lines appear as stream events arrive."
-      />
-    )
-  }
-
   return (
     <div className="audit-trail-tree-wrap">
-      <Tree
-        className="audit-trail-tree"
-        blockNode
-        showLine
-        defaultExpandAll
-        treeData={treeData}
-        aria-label="Order audit trail"
+      <Table<AuditMockRecord>
+        className="audit-trail-table"
+        columns={columns}
+        dataSource={MOCK_AUDIT_TREE}
+        pagination={false}
+        size="small"
+        tableLayout="fixed"
+        rowKey="key"
+        expandable={{
+          indentSize: 22,
+        }}
+        aria-label="Order audit trail (sample hierarchy)"
       />
     </div>
   )

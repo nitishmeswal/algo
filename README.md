@@ -25,27 +25,51 @@ A **demo workspace** with a marketing **landing page**, a **dark Ant Design** sh
 
 ## Run it
 
+### Client (Vite + React)
+
 ```bash
 npm install
 npm run dev
 ```
 
-Open `/` for the landing experience, `/app` for the FlowDesk workspace. Other scripts: `npm run build`, `npm run lint`, `npm run preview`.
+Open `/` for the landing experience and `/app` for the FlowDesk workspace.
 
-The React app lives under **`client/`** (`client/src`, `client/index.html`, `client/public`). Builds still emit to **`dist/`** at the repository root.
+Other client/root scripts:
+- `npm run build`
+- `npm run lint`
+- `npm run preview`
 
-### Stream server (Phase 1)
+The React app lives under **`client/`** (`client/src`, `client/index.html`, `client/public`). Builds emit to **`dist/`** at the repository root.
 
-Express + **`ws`** in **`server/`**: **`GET /health`**, WebSocket **`/blotter-stream`**, monotonic **`sequence`** per connection, one **JSON text frame** per message (`order_created` sample on connect, then **`heartbeat`** every 4s). **`GET /blotter-stream`** returns a small JSON hint (streams are **WebSocket**, not a normal HTTP page). With **`npm run dev`**, Vite proxies **`/blotter-stream`** to the stream server on **`3001`** (run **`npm run dev:server`** in another terminal).
+### Server (Express + ws)
+
+Express + **`ws`** in **`server/`**: **`GET /health`**, WebSocket **`/blotter-stream`**, and one JSON text frame per message using the same discriminated event shape the client ingests (`order_created`, `order_updated`, `order_cancelled`, `order_rejected`, `heartbeat`).
+
+Current behavior in `server/src/index.ts`:
+
+- Per-connection state (`sequence`, order counter, in-memory live order map)
+- Immediate `order_created` on connect
+- Continuous interval-based mock lifecycle events (create/update/reject/cancel)
+- Independent heartbeat tick every 4s
+- Interval cleanup on socket close
+
+`GET /blotter-stream` returns a JSON hint (streams are **WebSocket**, not a normal HTTP page).
+
+Dev proxy: with client `npm run dev`, Vite proxies **`/blotter-stream`** to **`127.0.0.1:3001`**.  
+Server default port is **`8000`**, so set `PORT=3001` when using the proxy target.
 
 ```bash
-cd server && npm install && npm run dev
+cd server && npm install
+# start server
+npm run dev
+# if using Vite proxy target from vite.config.ts:
+# PORT=3001 npm run dev
 # other terminal:
 curl http://localhost:3001/health
 # optional: npx wscat -c ws://localhost:3001/blotter-stream
 ```
 
-From the repo root you can run **`npm run dev:server`** (same as `npm run dev` inside `server/`). Override port with **`PORT`**.
+From the repo root you can run **`npm run dev:server`** (same as running `npm run dev` inside `server/`). Override port with **`PORT`** (for example `PORT=3001 npm run dev:server`).
 
 To drive the workspace from the stream server instead of the in-browser mock, set **`VITE_BLOTTER_WS_URL`** (see [`.env.example`](.env.example)), e.g. `ws://127.0.0.1:3001/blotter-stream`, or use the Vite dev proxy with **`ws://127.0.0.1:5173/blotter-stream`** while **`npm run dev`** and **`npm run dev:server`** are both running.
 
@@ -56,7 +80,16 @@ To drive the workspace from the stream server instead of the in-browser mock, se
 - [x] **Dual entry of orders** — configurable mock emitter plus delayed `submitOrder` API; both emit `order_created` / updates into the store  
 - [x] **Blotter table UX** — sort & column filters, virtual scroll, grouped headers, fixed selection + key reference columns, P&L column  
 - [x] **Order ticket & layout** — Ant `Form` + validation, collapsible order column (preference persisted in `localStorage`), stats strip  
-- [x] **Audit trail** — tree of stream-derived audit entries per order (see store + mapper)  
+- [ ] **Audit trail (mocked for now)** — tree-table style audit surface for hierarchy previews (mock tree-table UI) plus stream-derived audit domain in store/mappers  
+
+## Main todos
+
+- [x] Enrich mock stream by reusing the same data types and event shapes as the websocket/backend feed.
+- [ ] Configure backend data layer (Postgres, connection management, migrations baseline).
+- [ ] Configure API layer endpoints: `GET /orders`, `GET /orders/:id/audit`.
+- [ ] Add Postgres tables for audit and audit events (initial schema).
+- [ ] Implement audit trail tree view from API data (shape, transform to tree, render).
+- [ ] Configure master/detail view for order list and selected order context.
 
 ## Production hardening (todo)
 
@@ -87,7 +120,7 @@ To drive the workspace from the stream server instead of the in-browser mock, se
 | Stream + event types | `client/src/features/blotter/types.ts`, `client/src/features/blotter/realtime/mockOrderStream.ts` |
 | Store | `client/src/features/blotter/store/useBlotterStore.ts` |
 | Order table | `client/src/features/table/BlotterTable.tsx` |
-| Audit trail (tree) | `client/src/features/table/AuditTrailTable.tsx`, `client/src/features/blotter/audit/` |
+| Audit trail (tree table + audit domain) | `client/src/features/table/AuditTrailTable.tsx`, `client/src/features/blotter/audit/` |
 | Deterministic insights + modals (AI hooks later) | `client/src/features/insights/deterministicInsights.ts`, `client/src/features/insights/InsightModals.tsx` |
-| Stream server (Express + ws, phase 1) | `server/src/index.ts` |
+| Stream server (Express + ws, interval mock lifecycle stream) | `server/src/index.ts` |
 | WebSocket client adapter + hook | `client/src/features/blotter/realtime/blotterWebSocketAdapter.ts`, `useBlotterWebSocketStream.ts` |

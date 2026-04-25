@@ -92,7 +92,8 @@ export default function OrderEntryForm() {
                 Reset
               </Button>
               <Button
-                type="primary"
+                color="primary"
+                variant="outlined"
                 block
                 className="order-submit-btn"
                 htmlType="submit"

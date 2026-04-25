@@ -297,7 +297,7 @@ function PrimeBlotterApp() {
             {orderFormOpen ? (
               <>
                 <Typography.Title level={5} className="surface-section-label">
-                  Order form
+                  Order Form
                 </Typography.Title>
                 <Button
                   type="text"
@@ -320,7 +320,7 @@ function PrimeBlotterApp() {
           </div>
           <div className="surface-section-label-row order-workspace-label order-workspace-label--table">
             <Typography.Title level={5} className="surface-section-label">
-              Order table
+              Order Table
             </Typography.Title>
             <div className="order-table-heading-actions">
               <Typography.Text type="secondary" className="order-table-heading-actions__hint">
@@ -361,7 +361,7 @@ function PrimeBlotterApp() {
 
           {orderFormOpen ? <OrderEntryForm /> : null}
 
-          <section className="order-table-section" aria-label="Order table">
+          <section className="order-table-section" aria-label="Order Table">
             <Card className="app-card">
               <BlotterTable
                 data={filteredOrders}
@@ -393,13 +393,13 @@ function PrimeBlotterApp() {
           </section>
         </div>
 
-        <section className="audit-trail-section" aria-label="Audit trail">
+        <section className="audit-trail-section" aria-label="Audit Trail">
           <div className="surface-section-label-row">
             <Typography.Title level={5} className="surface-section-label">
-              Audit trail
+              Audit Trail
             </Typography.Title>
           </div>
-          <Card className="app-card">
+          <Card className="app-card app-card--audit" bordered={false}>
             <AuditTrailTable />
           </Card>
         </section>
