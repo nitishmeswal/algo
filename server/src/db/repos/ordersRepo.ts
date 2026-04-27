@@ -1,5 +1,8 @@
 import type { PoolClient } from 'pg'
 
+import { dbPool } from '../connection.js'
+import type { OrderRow } from '../models.js'
+
 /** CamelCase stream order shape → DB row (snake_case columns). */
 export type StreamOrderSnapshot = {
   id: string
@@ -130,4 +133,24 @@ export async function markOrderRejected(client: PoolClient, orderId: string, rea
     `,
     [orderId, reason],
   )
+}
+
+const ORDERS_SELECT_COLUMNS = `
+  id, client_order_id, symbol, side, quantity, limit_price, filled_quantity, average_fill_price,
+  pnl, status, time_in_force, venue, account, counterparty, rejection_reason, created_at, updated_at
+`
+
+export async function listOrders(): Promise<OrderRow[]> {
+  const result = await dbPool.query<OrderRow>(
+    `SELECT ${ORDERS_SELECT_COLUMNS} FROM orders ORDER BY updated_at DESC`,
+  )
+  return result.rows
+}
+
+export async function findOrderById(id: string): Promise<OrderRow | undefined> {
+  const result = await dbPool.query<OrderRow>(
+    `SELECT ${ORDERS_SELECT_COLUMNS} FROM orders WHERE id = $1`,
+    [id],
+  )
+  return result.rows[0]
 }

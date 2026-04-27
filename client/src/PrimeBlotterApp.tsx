@@ -74,7 +74,9 @@ function PrimeBlotterApp() {
   }, [orderFormOpen])
 
   useBlotterWebSocketStream({ url: BLOTTER_WS_URL, enabled: USE_BLOTTER_WEBSOCKET })
-  useBlotterMockStream({ enabled: !USE_BLOTTER_WEBSOCKET })
+  
+  // # TODO: fallback
+  // useBlotterMockStream({ enabled: !USE_BLOTTER_WEBSOCKET })
   const orderIds = useBlotterStore((s) => s.orderIds)
   const ordersById = useBlotterStore((s) => s.ordersById)
   const lastBeat = useBlotterStore((s) => s.lastHeartbeatAt)
