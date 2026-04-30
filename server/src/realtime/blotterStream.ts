@@ -1,4 +1,5 @@
 import type http from 'node:http'
+import { randomUUID } from 'node:crypto'
 
 import { WebSocket, WebSocketServer } from 'ws'
 
@@ -37,7 +38,6 @@ type OrderLike = {
 
 type ConnectionState = {
   seq: number
-  orderCounter: number
   live: Map<string, OrderLike>
 }
 
@@ -73,22 +73,15 @@ function heartbeatPayload(state: ConnectionState) {
   }
 }
 
-function createClientOrderId(n: number): string {
-  return `cl-${String(n).padStart(4, '0')}`
-}
-
-function createOrderId(n: number): string {
-  return `ORD-SERVER-${String(n).padStart(4, '0')}`
-}
-
-function generateMockOrder(state: ConnectionState): OrderLike {
-  state.orderCounter += 1
+function generateMockOrder(): OrderLike {
   const now = isoNow()
   const quantity = randInt(1, 50) * 100
   const limitPrice = Math.round((20 + Math.random() * 400) * 100) / 100
   return {
-    id: createOrderId(state.orderCounter),
-    clientOrderId: createClientOrderId(state.orderCounter),
+    // Globally unique ids so reconnects / new sockets do not collide with rows already in `orders`
+    // (numeric counters reused to reuse `ORD-SERVER-0001` + UNIQUE `client_order_id` caused upserts / insert failures).
+    id: `ORD-${randomUUID()}`,
+    clientOrderId: `cl-${randomUUID()}`,
     symbol: pickOne(SYMBOLS),
     side: Math.random() > 0.5 ? 'buy' : 'sell',
     quantity,
@@ -114,7 +107,7 @@ function orderCreatedPayload(state: ConnectionState, order: OrderLike) {
 }
 
 function emitCreated(state: ConnectionState) {
-  const order = generateMockOrder(state)
+  const order = generateMockOrder()
   state.live.set(order.id, order)
   return orderCreatedPayload(state, order)
 }
@@ -220,7 +213,7 @@ export function attachBlotterStream(server: http.Server): void {
   })
 
   wss.on('connection', (ws) => {
-    const state: ConnectionState = { seq: 0, orderCounter: 0, live: new Map() }
+    const state: ConnectionState = { seq: 0, live: new Map() }
 
     if (ws.readyState === WebSocket.OPEN) {
       sendStreamPayload(ws, emitCreated(state))

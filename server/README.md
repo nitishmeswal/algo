@@ -65,7 +65,7 @@ npm install
 npm run dev
 ```
 
-Optional: run on proxy-aligned port:
+Optional: run on a non-default port (then point Vite’s `server.proxy` at the same port):
 
 ```bash
 PORT=3001 npm run dev
@@ -75,7 +75,7 @@ PORT=3001 npm run dev
 
 ```bash
 curl http://localhost:8000/health
-# or if PORT=3001:
+# or if you set PORT=3001:
 curl http://localhost:3001/health
 ```
 

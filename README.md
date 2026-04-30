@@ -55,23 +55,20 @@ Current behavior in `server/src/index.ts`:
 
 `GET /blotter-stream` returns a JSON hint (streams are **WebSocket**, not a normal HTTP page).
 
-Dev proxy: with client `npm run dev`, Vite proxies **`/blotter-stream`** to **`127.0.0.1:3001`**.  
-Server default port is **`8000`**, so set `PORT=3001` when using the proxy target.
+Dev proxy: with client `npm run dev`, Vite proxies **`/blotter-stream`** and **`/orders`** to **`127.0.0.1:8000`** (same as the server’s default **`PORT`**). If you run the API on another port, set **`PORT`** when starting the server **and** point `vite.config.ts` `server.proxy` at that port.
 
 ```bash
 cd server && npm install
-# start server
+# start server (listens on 8000 by default)
 npm run dev
-# if using Vite proxy target from vite.config.ts:
-# PORT=3001 npm run dev
-# other terminal:
-curl http://localhost:3001/health
-# optional: npx wscat -c ws://localhost:3001/blotter-stream
+# other terminal — health check:
+curl http://localhost:8000/health
+# optional: npx wscat -c ws://localhost:8000/blotter-stream
 ```
 
-From the repo root you can run **`npm run dev:server`** (same as running `npm run dev` inside `server/`). Override port with **`PORT`** (for example `PORT=3001 npm run dev:server`).
+From the repo root you can run **`npm run dev:server`** (same as running `npm run dev` inside `server/`). Override port with **`PORT`** if needed, and keep Vite’s proxy target in sync.
 
-To drive the workspace from the stream server instead of the in-browser mock, set **`VITE_BLOTTER_WS_URL`** (see [`.env.example`](.env.example)), e.g. `ws://127.0.0.1:3001/blotter-stream`, or use the Vite dev proxy with **`ws://127.0.0.1:5173/blotter-stream`** while **`npm run dev`** and **`npm run dev:server`** are both running.
+To drive the workspace from the stream server instead of the in-browser mock, set **`VITE_BLOTTER_WS_URL`** (see [`.env.example`](.env.example)), e.g. `ws://127.0.0.1:8000/blotter-stream`, or use the Vite dev proxy with **`ws://127.0.0.1:5173/blotter-stream`** while **`npm run dev`** and **`npm run dev:server`** are both running.
 
 ## Features covered
 
@@ -88,7 +85,8 @@ To drive the workspace from the stream server instead of the in-browser mock, se
 - [x] Configure backend data layer (Postgres, connection management, migrations baseline).
 - [x] Add Postgres tables for audit and audit events (initial schema).
 - [x] Create `auditRepo`, `ordersRepo` and `streamProjector` to ingest event envelopes and dedupe safely into DB 
-- [ ] Configure API layer endpoints: `GET /orders`, `GET /orders/:id/audit`.
+- [x] **Fetch → delta init** — `GET /orders` hydrates the blotter store (`hydrateOrdersFromApi`), then the WebSocket opens for stream deltas (`useBlotterLiveBootstrap` gates `useBlotterWebSocketStream`); dev uses same-origin `/orders` via Vite proxy (optional `VITE_BLOTTER_HTTP_URL`).
+- [x] Configure API layer endpoints: `GET /orders`, `GET /orders/:id/audit`.
 - [ ] Implement audit trail tree view from API data (shape, transform to tree, render).
 - [ ] Configure master/detail view for order list and selected order context.
 

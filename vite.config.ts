@@ -19,9 +19,14 @@ export default defineConfig({
     proxy: {
       // Dev: connect from the Vite origin, e.g. `ws://${location.host}/blotter-stream`
       '/blotter-stream': {
-        target: 'http://127.0.0.1:3001',
+        // Match server default `PORT` (8000); override PORT on the server if you change this.
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         ws: true,
+      },
+      '/orders': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
       },
     },
   },

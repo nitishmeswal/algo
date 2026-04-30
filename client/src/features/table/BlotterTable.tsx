@@ -330,6 +330,7 @@ function mapSpecToLeafColumn(
       if (!cellFlash) return {}
       return { className: cellFlash === 'up' ? 'price-flash-up' : 'price-flash-down' }
     },
+    // Ant Design passes (value, record); spec.render is always called with the row only (see ColumnSpec).
     render: spec.render ? (_value, record) => spec.render?.(record) : undefined,
   }
 }

@@ -83,7 +83,15 @@ async function projectInTransaction(event: Record<string, unknown>): Promise<voi
 
   if (type === 'heartbeat') return
 
-  if (typeof type !== 'string' || typeof sequence !== 'number' || typeof source !== 'string') return
+  if (typeof type !== 'string' || typeof source !== 'string') return
+  const sequenceNum =
+    typeof sequence === 'number' && Number.isFinite(sequence)
+      ? sequence
+      : typeof sequence === 'string' && Number.isFinite(Number(sequence))
+        ? Number(sequence)
+        : NaN
+  if (!Number.isFinite(sequenceNum)) return
+
   const emittedAt = parseEmittedAt(emittedAtRaw)
   if (emittedAt === null) return
 
@@ -101,7 +109,7 @@ async function projectInTransaction(event: Record<string, unknown>): Promise<voi
       await tryInsertAuditEvent(client, {
         id: randomUUID(),
         orderId: order.id,
-        sequence,
+        sequence: sequenceNum,
         eventType: type,
         source,
         emittedAt,
@@ -144,7 +152,7 @@ async function projectInTransaction(event: Record<string, unknown>): Promise<voi
     const inserted = await tryInsertAuditEvent(client, {
       id: randomUUID(),
       orderId,
-      sequence,
+      sequence: sequenceNum,
       eventType: type,
       source,
       emittedAt,

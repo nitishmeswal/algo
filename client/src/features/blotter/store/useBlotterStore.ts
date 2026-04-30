@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { mapEventToAudit } from '../audit/mapEventToAudit'
 import type { AuditTrailEntry } from '../audit/types'
-import type { BlotterStreamEvent, Order, OrderId, StreamSequence } from '../types'
+import { orderId, type BlotterStreamEvent, type Order, type OrderId, type StreamSequence } from '../types'
 
 /** Max audit lines kept per order to bound memory during long sessions. */
 export const MAX_AUDIT_ENTRIES_PER_ORDER = 200
@@ -15,6 +15,11 @@ export type BlotterState = {
   lastStreamSequence: StreamSequence | null
   /** Append-only audit lines keyed by order; derived from ingested stream events. */
   auditByOrderId: Record<OrderId, AuditTrailEntry[]>
+  /**
+   * Replace blotter rows from a `GET /orders` (or equivalent) snapshot. Preserves `auditByOrderId`;
+   * resets stream counters so subsequent WS deltas apply on top of a clean sequence baseline.
+   */
+  hydrateOrdersFromApi: (orders: Order[]) => void
   ingestEvent: (event: BlotterStreamEvent) => void
   selectOrder: (id: OrderId | null) => void
   reset: () => void
@@ -68,6 +73,24 @@ function prevOrderForAudit(state: BlotterState, event: BlotterStreamEvent): Orde
 // idempotent insertion, when the network misbehaves
 function appendOrderId(ids: OrderId[], id: OrderId): OrderId[] {
   return ids.includes(id) ? ids : [...ids, id]
+}
+
+/** Build snapshot fields from an API list (array order = display order, e.g. server `ORDER BY updated_at DESC`). */
+function snapshotFromApiOrders(orders: readonly Order[]): BlotterSnapshot {
+  const orderIds: OrderId[] = []
+  const ordersById = {} as Record<OrderId, Order>
+  for (const raw of orders) {
+    const id = orderId(String(raw.id))
+    orderIds.push(id)
+    ordersById[id] = { ...raw, id }
+  }
+  return {
+    ordersById,
+    orderIds,
+    eventCount: 0,
+    lastHeartbeatAt: null,
+    lastStreamSequence: null,
+  }
 }
 
 export function applyBlotterEvent(snapshot: BlotterSnapshot, event: BlotterStreamEvent): BlotterSnapshot {
@@ -153,6 +176,11 @@ export const useBlotterStore = create<BlotterState>((set) => ({
   ...emptySnapshot,
   auditByOrderId: emptyAudit,
   selectedOrderId: null,
+  hydrateOrdersFromApi: (orders) =>
+    set((state) => ({
+      ...state,
+      ...snapshotFromApiOrders(orders),
+    })),
   ingestEvent: (event) =>
     set((state) => {
       const prevOrder = prevOrderForAudit(state, event)

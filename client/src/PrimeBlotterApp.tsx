@@ -6,8 +6,8 @@ import {
 } from '@ant-design/icons'
 import { useEffect, useMemo, useState } from 'react'
 import type { Key } from 'react'
-import { Avatar, Button, Card, Dropdown, Input, Layout, Menu, Space, Typography, message } from 'antd'
-import { useBlotterMockStream } from './features/blotter/realtime/useBlotterMockStream'
+import { Alert, Avatar, Button, Card, Dropdown, Input, Layout, Menu, Space, Typography, message } from 'antd'
+import { useBlotterLiveBootstrap } from './features/blotter/realtime/useBlotterLiveBootstrap'
 import { useBlotterWebSocketStream } from './features/blotter/realtime/useBlotterWebSocketStream'
 import OrderEntryForm from './features/order-entry/OrderEntryForm'
 import AmendOrderModal from './features/blotter/AmendOrderModal'
@@ -73,7 +73,9 @@ function PrimeBlotterApp() {
     }
   }, [orderFormOpen])
 
-  useBlotterWebSocketStream({ url: BLOTTER_WS_URL, enabled: USE_BLOTTER_WEBSOCKET })
+  const { status: liveBootstrapStatus, error: liveBootstrapError } = useBlotterLiveBootstrap(USE_BLOTTER_WEBSOCKET)
+  const blotterWsEnabled = USE_BLOTTER_WEBSOCKET && liveBootstrapStatus === 'ready'
+  useBlotterWebSocketStream({ url: BLOTTER_WS_URL, enabled: blotterWsEnabled })
   
   // # TODO: fallback
   // useBlotterMockStream({ enabled: !USE_BLOTTER_WEBSOCKET })
@@ -179,6 +181,18 @@ function PrimeBlotterApp() {
       </Layout.Header>
 
       <Layout.Content className="app-content">
+        {USE_BLOTTER_WEBSOCKET && liveBootstrapStatus === 'loading' ? (
+          <Alert type="info" showIcon message="Loading orders…" className="app-bootstrap-alert" />
+        ) : null}
+        {USE_BLOTTER_WEBSOCKET && liveBootstrapStatus === 'error' ? (
+          <Alert
+            type="error"
+            showIcon
+            message="Could not load orders"
+            description={liveBootstrapError ?? 'Unknown error'}
+            className="app-bootstrap-alert"
+          />
+        ) : null}
         <Card className="app-card app-card--stats" bordered={false}>
           <div className="stats-strip-layout">
             <div className="stats-strip-cluster">
@@ -366,6 +380,7 @@ function PrimeBlotterApp() {
           <section className="order-table-section" aria-label="Order Table">
             <Card className="app-card">
               <BlotterTable
+                key={orderIds.length === 0 ? 'blotter-empty' : orderIds.join('\u001f')}
                 data={filteredOrders}
                 selectedRowKeys={selectedRowKeys}
                 onSelectedRowKeysChange={setSelectedRowKeys}
