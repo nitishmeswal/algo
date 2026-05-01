@@ -92,6 +92,11 @@ function PrimeBlotterApp() {
     [orders, nlpQuery],
   )
 
+  /** Remount virtual table once per bootstrap phase, not on every new `orderId` (avoids scroll jumping to top on each WS delta). */
+  const blotterTableMountKey = USE_BLOTTER_WEBSOCKET
+    ? `blotter-live-${liveBootstrapStatus}`
+    : 'blotter-local'
+
   const selectedOrders = useMemo(
     () => selectedRowKeys.map((k) => ordersById[orderId(String(k))]).filter(Boolean),
     [selectedRowKeys, ordersById],
@@ -380,7 +385,7 @@ function PrimeBlotterApp() {
           <section className="order-table-section" aria-label="Order Table">
             <Card className="app-card">
               <BlotterTable
-                key={orderIds.length === 0 ? 'blotter-empty' : orderIds.join('\u001f')}
+                key={blotterTableMountKey}
                 data={filteredOrders}
                 selectedRowKeys={selectedRowKeys}
                 onSelectedRowKeysChange={setSelectedRowKeys}
