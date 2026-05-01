@@ -42,5 +42,6 @@ server.listen(PORT, () => {
   console.log(`  GET  http://localhost:${PORT}/health`)
   console.log(`  GET  http://localhost:${PORT}/orders`)
   console.log(`  GET  http://localhost:${PORT}/orders/:id`)
+  console.log(`  GET  http://localhost:${PORT}/orders/:id/audit`)
   console.log(`  WS   ws://localhost:${PORT}${WS_PATH}`)
 })

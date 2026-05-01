@@ -1,5 +1,26 @@
 import type { PoolClient } from 'pg'
 
+import { dbPool } from '../connection.js'
+import type { OrderAuditEventRow } from '../models.js'
+
+const AUDIT_EVENT_SELECT_COLUMNS = `
+  id, order_id, sequence, event_type, source, emitted_at, summary, reason, patch_json, order_snapshot_json, created_at
+`
+
+/** All persisted audit rows for an order, oldest sequence first. */
+export async function listAuditEventsByOrderId(orderId: string): Promise<OrderAuditEventRow[]> {
+  const result = await dbPool.query<OrderAuditEventRow>(
+    `
+    SELECT ${AUDIT_EVENT_SELECT_COLUMNS}
+    FROM order_audit_events
+    WHERE order_id = $1
+    ORDER BY sequence ASC
+    `,
+    [orderId],
+  )
+  return result.rows
+}
+
 export type InsertAuditEventInput = {
   id: string
   orderId: string
