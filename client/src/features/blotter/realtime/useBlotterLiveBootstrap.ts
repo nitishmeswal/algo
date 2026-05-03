@@ -202,7 +202,7 @@ export function useBlotterLiveBootstrap(enabled: boolean): {
         if (ac.signal.aborted) return
         if (!res.ok) {
           setStatus('error')
-          setError(`Could not load orders (HTTP ${res.status})`)
+          setError(`HTTP ${res.status}`)
           return
         }
         const json: unknown = await res.json()

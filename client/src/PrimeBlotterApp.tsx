@@ -1,4 +1,5 @@
 import {
+  CloseOutlined,
   DownOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -65,6 +66,7 @@ function PrimeBlotterApp() {
   const [amendModalOpen, setAmendModalOpen] = useState(false)
   const [orderFormOpen, setOrderFormOpen] = useState(readOrderFormOpen)
   const [topNavKey, setTopNavKey] = useState<string>('blotter')
+  const [ordersLoadErrorDismissed, setOrdersLoadErrorDismissed] = useState(false)
   useEffect(() => {
     try {
       localStorage.setItem(ORDER_FORM_OPEN_KEY, orderFormOpen ? '1' : '0')
@@ -76,6 +78,12 @@ function PrimeBlotterApp() {
   const { status: liveBootstrapStatus, error: liveBootstrapError } = useBlotterLiveBootstrap(USE_BLOTTER_WEBSOCKET)
   const blotterWsEnabled = USE_BLOTTER_WEBSOCKET && liveBootstrapStatus === 'ready'
   useBlotterWebSocketStream({ url: BLOTTER_WS_URL, enabled: blotterWsEnabled })
+
+  useEffect(() => {
+    if (liveBootstrapStatus !== 'error') {
+      setOrdersLoadErrorDismissed(false)
+    }
+  }, [liveBootstrapStatus])
   
   // # TODO: fallback
   // useBlotterMockStream({ enabled: !USE_BLOTTER_WEBSOCKET })
@@ -146,6 +154,11 @@ function PrimeBlotterApp() {
       : d.toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
   }, [lastBeat])
 
+  const ordersLoadErrorText =
+    USE_BLOTTER_WEBSOCKET && liveBootstrapStatus === 'error'
+      ? `Could not load orders - ${(liveBootstrapError ?? 'Unknown error').trim().replace(/\s+/g, ' ')}`
+      : null
+
   return (
     <Layout className="app-layout">
       <Layout.Header className="app-top-nav">
@@ -189,13 +202,19 @@ function PrimeBlotterApp() {
         {USE_BLOTTER_WEBSOCKET && liveBootstrapStatus === 'loading' ? (
           <Alert type="info" showIcon message="Loading orders…" className="app-bootstrap-alert" />
         ) : null}
-        {USE_BLOTTER_WEBSOCKET && liveBootstrapStatus === 'error' ? (
+        {ordersLoadErrorText && !ordersLoadErrorDismissed ? (
           <Alert
             type="error"
             showIcon
-            message="Could not load orders"
-            description={liveBootstrapError ?? 'Unknown error'}
-            className="app-bootstrap-alert"
+            closable
+            closeIcon={<CloseOutlined />}
+            onClose={() => setOrdersLoadErrorDismissed(true)}
+            className="app-bootstrap-alert app-bootstrap-alert--single-line"
+            message={
+              <span className="app-bootstrap-alert__one-line" title={ordersLoadErrorText}>
+                {ordersLoadErrorText}
+              </span>
+            }
           />
         ) : null}
         <Card className="app-card app-card--stats" bordered={false}>

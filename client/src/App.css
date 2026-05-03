@@ -27,6 +27,29 @@
   margin-bottom: 12px;
 }
 
+.app-bootstrap-alert--single-line .ant-alert-message {
+  margin-bottom: 0;
+}
+
+.app-bootstrap-alert--single-line .ant-alert-content {
+  min-width: 0;
+}
+
+.app-bootstrap-alert__one-line {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-bootstrap-alert--single-line .ant-alert-close-icon {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.app-bootstrap-alert--single-line .ant-alert-close-icon:hover {
+  color: rgba(255, 255, 255, 0.92);
+}
+
 .page-header {
   display: flex;
   align-items: center;
@@ -195,15 +218,77 @@ a.page-header-brand--link:hover .page-header-title {
 }
 
 .app-card.app-card--form .ant-card-body {
-  padding: 14px 16px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.app-card.app-card--form .ant-card-body > .order-entry-form {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Form card: same family as stats strip + table chrome */
+.app-card.app-card--form.ant-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 3px solid #22d3ee;
+  background: var(--app-bg-card);
+  box-shadow:
+    0 0 0 1px rgba(34, 211, 238, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.order-entry-form__band {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  margin: 0;
+  background: linear-gradient(180deg, #22252c 0%, #1a1d24 100%);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.order-entry-form__band-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.order-entry-form__section {
+  margin-bottom: 4px;
+}
+
+.order-entry-form__section--order {
+  margin-bottom: 0;
+  padding-top: 2px;
+}
+
+.order-entry-form__section-title {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.38);
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.order-entry-form.order-entry-form {
+  padding: 12px 14px 14px;
 }
 
 .app-card.app-card--stats.ant-card {
   margin-bottom: 12px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-top: 3px solid #4f46e5;
+  border-top: 3px solid #22d3ee;
   background: var(--app-bg-card);
-  box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.14);
+  box-shadow:
+    0 0 0 1px rgba(34, 211, 238, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .app-card.app-card--stats .ant-card-body {
@@ -892,7 +977,8 @@ a.page-header-brand--link:hover .page-header-title {
   height: auto;
 }
 
-.order-entry-form .ant-select-single:not(.ant-select-customize-input) .ant-select-selector {
+.order-entry-form .ant-select-single:not(.ant-select-customize-input) .ant-select-selector,
+.order-entry-form .ant-select-auto-complete.ant-select .ant-select-selector {
   height: 32px !important;
   min-height: 32px !important;
   padding-inline: 10px !important;
@@ -956,6 +1042,36 @@ a.page-header-brand--link:hover .page-header-title {
   padding-top: 8px;
 }
 
+.order-entry-actions__row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+}
+
+.order-entry-btn-reset.ant-btn {
+  flex: 0 1 36%;
+  min-width: 0;
+  font-weight: 500;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: rgba(255, 255, 255, 0.88) !important;
+}
+
+.order-entry-btn-reset.ant-btn:hover {
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+}
+
+.order-entry-btn-submit.ant-btn.ant-btn-primary {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.12) inset;
+}
+
 .order-entry-actions .ant-btn {
   height: 32px !important;
   min-height: 32px !important;
@@ -963,23 +1079,6 @@ a.page-header-brand--link:hover .page-header-title {
   line-height: 1.2 !important;
   padding-inline: 12px !important;
   font-size: 13px !important;
-}
-
-.order-submit-btn.ant-btn.ant-btn-color-primary.ant-btn-variant-outlined {
-  min-height: 32px;
-  font-size: 13px;
-  font-weight: 600;
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-.order-submit-btn.ant-btn.ant-btn-color-primary.ant-btn-variant-outlined:not(:disabled):hover,
-.order-submit-btn.ant-btn.ant-btn-color-primary.ant-btn-variant-outlined:not(:disabled):focus-visible {
-  background: transparent !important;
-}
-
-.order-submit-btn.ant-btn.ant-btn-color-primary.ant-btn-variant-outlined:not(:disabled):active {
-  background: transparent !important;
 }
 
 .order-entry-form.ant-form-vertical .ant-form-item {
@@ -992,10 +1091,13 @@ a.page-header-brand--link:hover .page-header-title {
 }
 
 .order-entry-form.ant-form-vertical .ant-form-item-label > label {
-  font-size: 12px;
-  line-height: 1.3;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
   height: auto !important;
-  color: rgba(255, 255, 255, 0.96);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.52) !important;
 }
 
 .order-entry-form.ant-form-vertical .ant-form-item-control-input {
@@ -1004,6 +1106,127 @@ a.page-header-brand--link:hover .page-header-title {
 
 .order-entry-form.ant-form-vertical .ant-form-item-control-input-content {
   line-height: 1;
+}
+
+/* Form controls: same border / focus language as stats AI filter + blotter density */
+.app-card.app-card--form .order-entry-form .ant-input {
+  background: rgba(0, 0, 0, 0.28) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.app-card.app-card--form .order-entry-form .ant-input::placeholder {
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.app-card.app-card--form .order-entry-form .ant-input:hover {
+  border-color: rgba(255, 255, 255, 0.22) !important;
+}
+
+.app-card.app-card--form .order-entry-form .ant-input:focus,
+.app-card.app-card--form .order-entry-form .ant-input-focused {
+  border-color: rgba(34, 211, 238, 0.55) !important;
+  box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.14) !important;
+}
+
+.app-card.app-card--form .order-entry-form .ant-select-single .ant-select-selector,
+.app-card.app-card--form .order-entry-form .ant-select-auto-complete .ant-select-selector {
+  background: rgba(0, 0, 0, 0.28) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+.app-card.app-card--form .order-entry-form .ant-select-single .ant-select-selection-placeholder {
+  color: rgba(255, 255, 255, 0.32) !important;
+}
+
+.app-card.app-card--form .order-entry-form .ant-select-auto-complete .ant-select-selection-search-input::placeholder {
+  color: rgba(255, 255, 255, 0.32) !important;
+}
+
+.app-card.app-card--form .order-entry-form .ant-select:not(.ant-select-disabled):hover .ant-select-selector {
+  border-color: rgba(255, 255, 255, 0.22) !important;
+}
+
+.app-card.app-card--form .order-entry-form .ant-select-focused.ant-select:not(.ant-select-disabled) .ant-select-selector,
+.app-card.app-card--form .order-entry-form .ant-select.ant-select-open .ant-select-selector {
+  border-color: rgba(34, 211, 238, 0.55) !important;
+  box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.14) !important;
+}
+
+.app-card.app-card--form .order-entry-form .ant-input-number {
+  background: rgba(0, 0, 0, 0.28) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.app-card.app-card--form .order-entry-form .ant-input-number:hover {
+  border-color: rgba(255, 255, 255, 0.22) !important;
+}
+
+.app-card.app-card--form .order-entry-form .ant-input-number-focused {
+  border-color: rgba(34, 211, 238, 0.55) !important;
+  box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.14) !important;
+}
+
+.app-card.app-card--form .order-entry-form .ant-input-number .ant-input-number-handler-wrap {
+  border-inline-start-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.app-card.app-card--form .order-entry-form .ant-input-number .ant-input-number-handler {
+  border-color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.app-card.app-card--form .order-entry-form .ant-input-number .ant-input-number-handler:hover {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.order-entry-form .order-entry-input--mono,
+.order-entry-form .order-entry-input--symbol {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.order-entry-symbol-autocomplete.ant-select.ant-select-auto-complete .ant-select-selector input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.order-entry-symbol-typeahead-dropdown.ant-select-dropdown {
+  padding: 4px 0;
+  background: #1a1d24 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+}
+
+.order-entry-symbol-typeahead-dropdown .ant-select-item {
+  color: rgba(255, 255, 255, 0.9);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.order-entry-symbol-typeahead-dropdown .ant-select-item-option-active,
+.order-entry-symbol-typeahead-dropdown .ant-select-item-option-selected:not(.ant-select-item-option-disabled) {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.order-entry-symbol-typeahead-dropdown .ant-select-item-option-selected {
+  font-weight: 600;
+}
+
+.order-entry-symbol-typeahead-dropdown .ant-empty-description {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.order-entry-form .order-entry-control--numeric input.ant-input-number-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
 @media (max-width: 900px) {
@@ -1082,8 +1305,9 @@ a.page-header-brand--link:hover .page-header-title {
     justify-content: flex-end;
   }
 
-  .order-workspace .order-entry-actions .ant-space {
-    width: auto;
+  .order-workspace .order-entry-actions__row {
+    max-width: 420px;
+    margin-left: auto;
   }
 }
 
