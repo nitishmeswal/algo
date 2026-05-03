@@ -25,6 +25,12 @@ export type OrderEntryPayload = {
   limitPrice?: number
   timeInForce: TimeInForce
   venue?: string
+  /** Optional ClOrdID; when empty, a synthetic id is generated. */
+  clientOrderId?: string
+  /** Advanced-only — reserved for future routing / OMS wiring. */
+  executionProfile?: string
+  postOnly?: boolean
+  minQuantity?: number
 }
 
 function nextSequence() {
@@ -37,9 +43,10 @@ function buildOrder(payload: OrderEntryPayload): Order {
   const t = isoNow()
   const rnd = () => Math.random()
   const id = createOrderId(rnd)
+  const clientTrim = payload.clientOrderId?.trim()
   return {
     id,
-    clientOrderId: createClientOrderId(rnd),
+    clientOrderId: clientTrim && clientTrim.length > 0 ? clientTrim : createClientOrderId(rnd),
     symbol: payload.symbol.trim().toUpperCase(),
     side: payload.side,
     quantity: payload.quantity,

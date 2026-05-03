@@ -11,6 +11,13 @@ export type BlotterTableProps = {
   data: Order[]
   selectedRowKeys: Key[]
   onSelectedRowKeysChange: (keys: Key[]) => void
+  /** Row body click (not checkbox) — drives audit / “active” row, separate from checkbox selection. */
+  auditFocusKey: Key | null
+  onAuditFocusKeyChange: (key: Key | null) => void
+  /** Short footer value for the audit row (truncated id). */
+  auditSummaryLine: string
+  /** Full id (and symbol) for `title` tooltip on the audit footer value. */
+  auditSummaryTitle: string
   /** Invoked after the row is selected; used for summarize / amend flows. */
   onRowContextSummarize?: (orderId: string) => void
   onRowContextCancel?: (orderId: string) => void | Promise<void>
@@ -112,16 +119,6 @@ function columnAlign(spec: ColumnSpec): 'left' | 'center' | 'right' | undefined 
   return undefined
 }
 
-const statusTagColor: Record<OrderStatus, string> = {
-  pending_new: 'gold',
-  new: 'blue',
-  partially_filled: 'processing',
-  filled: 'success',
-  cancelled: 'default',
-  rejected: 'error',
-  replaced: 'geekblue',
-}
-
 function formatStatusLabel(status: OrderStatus): string {
   return status.replace(/_/g, ' ')
 }
@@ -213,7 +210,7 @@ const columnGroups: { title: string; key: string; columns: ColumnSpec[] }[] = [
         ellipsis: true,
         render: (record) => (
           <div className="blotter-side-cell">
-            <Tag color={record.side === 'buy' ? 'green' : 'red'}>{record.side.toUpperCase()}</Tag>
+            <Tag className={`blotter-side-tag blotter-side-tag--${record.side}`}>{record.side.toUpperCase()}</Tag>
           </div>
         ),
       },
@@ -288,7 +285,9 @@ const columnGroups: { title: string; key: string; columns: ColumnSpec[] }[] = [
         kind: 'string',
         width: 140,
         render: (record) => (
-          <Tag color={statusTagColor[record.status]}>{formatStatusLabel(record.status)}</Tag>
+          <Tag className={`blotter-status-tag blotter-status-tag--${record.status}`}>
+            {formatStatusLabel(record.status)}
+          </Tag>
         ),
       },
       { title: 'TIF', dataIndex: 'timeInForce', kind: 'string', width: 110 },
@@ -341,10 +340,21 @@ function flashKey(orderId: Order['id'], field: FlashField): string {
   return `${orderId}:${field}`
 }
 
+function isCheckboxOrSelectionColumnClick(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  return Boolean(
+    target.closest('.ant-table-selection-column') || target.closest('.ant-checkbox-wrapper'),
+  )
+}
+
 export default function BlotterTable({
   data,
   selectedRowKeys,
   onSelectedRowKeysChange,
+  auditFocusKey,
+  onAuditFocusKeyChange,
+  auditSummaryLine,
+  auditSummaryTitle,
   onRowContextSummarize,
   onRowContextCancel,
   onRowContextAmend,
@@ -452,10 +462,16 @@ export default function BlotterTable({
         className="blotter-table"
         rowKey="id"
         rowSelection={rowSelection}
+        rowClassName={(record) => (record.id === auditFocusKey ? 'blotter-row--audit-focus' : '')}
         onRow={(record) => ({
+          onClick: (e) => {
+            if (isCheckboxOrSelectionColumnClick(e.target)) return
+            onAuditFocusKeyChange(record.id)
+          },
           onContextMenu: (e) => {
             e.preventDefault()
             onSelectedRowKeysChange([record.id])
+            onAuditFocusKeyChange(record.id)
             setRowContextMenu({ x: e.clientX, y: e.clientY, record })
           },
         })}
@@ -467,9 +483,17 @@ export default function BlotterTable({
               <span className="blotter-table-footer__label">Visible rows</span>
               <span className="blotter-table-footer__value">{data.length}</span>
             </div>
-            <div className="blotter-table-footer__stat">
-              <span className="blotter-table-footer__label">Selected rows</span>
-              <span className="blotter-table-footer__value">{selectedRowKeys.length}</span>
+            <div className="blotter-table-footer__pair">
+              <div className="blotter-table-footer__stat">
+                <span className="blotter-table-footer__label">Checked rows</span>
+                <span className="blotter-table-footer__value">{selectedRowKeys.length}</span>
+              </div>
+              <div className="blotter-table-footer__stat blotter-table-footer__stat--audit">
+                <span className="blotter-table-footer__label">Audit row</span>
+                <span className="blotter-table-footer__value blotter-table-footer__value--audit" title={auditSummaryTitle}>
+                  {auditSummaryLine}
+                </span>
+              </div>
             </div>
           </div>
         )}

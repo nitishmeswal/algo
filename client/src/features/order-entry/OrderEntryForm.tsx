@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AutoComplete, Button, Card, Form, Input, InputNumber, Select, message } from 'antd'
+import { AutoComplete, Button, Card, Form, Input, InputNumber, Select, Switch, message } from 'antd'
 import { useBlotterStore } from '../blotter/store/useBlotterStore'
 import type { OrderEntryPayload } from '../blotter/api/submitOrder'
 import { submitOrder } from '../blotter/api/submitOrder'
@@ -8,6 +8,7 @@ import { buildSymbolTypeaheadOptions } from './symbolTypeahead'
 export default function OrderEntryForm() {
   const [form] = Form.useForm<OrderEntryPayload>()
   const [submitting, setSubmitting] = useState(false)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
 
   const orderIds = useBlotterStore((s) => s.orderIds)
   const ordersById = useBlotterStore((s) => s.ordersById)
@@ -36,10 +37,25 @@ export default function OrderEntryForm() {
   }
 
   return (
-    <section className="order-entry-section" aria-label="New order">
+    <section
+      className={`order-entry-section${advancedOpen ? ' order-entry-section--advanced' : ''}`}
+      aria-label="New order"
+    >
       <Card className="app-card app-card--form" bordered={false}>
-        <div className="order-entry-form__band" aria-hidden>
-          <span className="order-entry-form__band-label">New order ticket</span>
+        <div className="order-entry-form__band">
+          <div className="order-entry-form__band-inner">
+            <span className="order-entry-form__band-label">New order ticket</span>
+            <Button
+              type="link"
+              size="small"
+              className="order-entry-form__advanced-toggle"
+              aria-expanded={advancedOpen}
+              aria-controls="order-entry-advanced-panel"
+              onClick={() => setAdvancedOpen((o) => !o)}
+            >
+              {advancedOpen ? 'Hide advanced' : 'Advanced'}
+            </Button>
+          </div>
         </div>
         <Form
           className="order-entry-form"
@@ -47,79 +63,115 @@ export default function OrderEntryForm() {
           layout="vertical"
           size="small"
           requiredMark={false}
+          initialValues={{ postOnly: false }}
           onFinish={onFinish}
         >
-          <div className="order-entry-form__fields">
-            <div className="order-entry-form__section">
-              <div className="order-entry-form__section-title">Route</div>
-              <div className="order-entry-row-inline">
-                <Form.Item label="Account" name="account">
-                  <Input placeholder="PB-ALPHA" autoFocus className="order-entry-input--mono" />
-                </Form.Item>
-                <Form.Item label="Counterparty" name="counterparty">
-                  <Input placeholder="NMR-US" className="order-entry-input--mono" />
-                </Form.Item>
+          <div className="order-entry-form__panels">
+            <div className="order-entry-form__panel order-entry-form__panel--core">
+              <div className="order-entry-form__fields">
+                <div className="order-entry-form__section">
+                  <div className="order-entry-form__section-title">Route</div>
+                  <div className="order-entry-row-inline">
+                    <Form.Item label="Account" name="account">
+                      <Input placeholder="PB-ALPHA" autoFocus className="order-entry-input--mono" />
+                    </Form.Item>
+                    <Form.Item label="Counterparty" name="counterparty">
+                      <Input placeholder="NMR-US" className="order-entry-input--mono" />
+                    </Form.Item>
+                  </div>
+                </div>
+                <div className="order-entry-form__section order-entry-form__section--order">
+                  <div className="order-entry-form__section-title">Order</div>
+                  <div className="order-entry-grid">
+                    <Form.Item label="Symbol" name="symbol" rules={[{ required: true, message: 'Symbol is required' }]}>
+                      <AutoComplete
+                        allowClear
+                        options={symbolOptions}
+                        filterOption={false}
+                        placeholder="Search or type symbol"
+                        className="order-entry-symbol-autocomplete"
+                        popupClassName="order-entry-symbol-typeahead-dropdown"
+                        notFoundContent={
+                          symbolOptions.length === 0 && symbolInput?.trim() ? 'No matches' : undefined
+                        }
+                        maxLength={16}
+                      />
+                    </Form.Item>
+
+                    <Form.Item label="Side" name="side" rules={[{ required: true, message: 'Side is required' }]}>
+                      <Select
+                        placeholder="Side"
+                        options={[
+                          { value: 'buy', label: 'Buy' },
+                          { value: 'sell', label: 'Sell' },
+                        ]}
+                      />
+                    </Form.Item>
+
+                    <Form.Item label="Quantity" name="quantity" rules={[{ required: true, message: 'Quantity is required' }]}>
+                      <InputNumber min={1} step={100} controls className="order-entry-control--numeric" style={{ width: '100%' }} />
+                    </Form.Item>
+
+                    <Form.Item label="Limit price" name="limitPrice">
+                      <InputNumber min={0.01} step={0.01} controls className="order-entry-control--numeric" style={{ width: '100%' }} />
+                    </Form.Item>
+
+                    <Form.Item label="Time in force" name="timeInForce" rules={[{ required: true, message: 'TIF is required' }]}>
+                      <Select
+                        placeholder="TIF"
+                        options={[
+                          { value: 'day', label: 'DAY' },
+                          { value: 'gtc', label: 'GTC' },
+                          { value: 'ioc', label: 'IOC' },
+                          { value: 'fok', label: 'FOK' },
+                        ]}
+                      />
+                    </Form.Item>
+
+                    <Form.Item label="Venue" name="venue" rules={[{ required: true, message: 'Venue is required' }]}>
+                      <Select
+                        placeholder="Venue"
+                        options={[
+                          { value: 'MOCK', label: 'MOCK' },
+                          { value: 'MOCK_ALT', label: 'MOCK_ALT' },
+                        ]}
+                      />
+                    </Form.Item>
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="order-entry-form__section order-entry-form__section--order">
-              <div className="order-entry-form__section-title">Order</div>
-              <div className="order-entry-grid">
-                <Form.Item label="Symbol" name="symbol" rules={[{ required: true, message: 'Symbol is required' }]}>
-                  <AutoComplete
-                    allowClear
-                    options={symbolOptions}
-                    filterOption={false}
-                    placeholder="Search or type symbol"
-                    className="order-entry-symbol-autocomplete"
-                    popupClassName="order-entry-symbol-typeahead-dropdown"
-                    notFoundContent={
-                      symbolOptions.length === 0 && symbolInput?.trim() ? 'No matches' : undefined
-                    }
-                    maxLength={16}
-                  />
-                </Form.Item>
 
-                <Form.Item label="Side" name="side" rules={[{ required: true, message: 'Side is required' }]}>
-                  <Select
-                    placeholder="Side"
-                    options={[
-                      { value: 'buy', label: 'Buy' },
-                      { value: 'sell', label: 'Sell' },
-                    ]}
-                  />
-                </Form.Item>
-
-                <Form.Item label="Quantity" name="quantity" rules={[{ required: true, message: 'Quantity is required' }]}>
-                  <InputNumber min={1} step={100} controls className="order-entry-control--numeric" style={{ width: '100%' }} />
-                </Form.Item>
-
-                <Form.Item label="Limit price" name="limitPrice">
-                  <InputNumber min={0.01} step={0.01} controls className="order-entry-control--numeric" style={{ width: '100%' }} />
-                </Form.Item>
-
-                <Form.Item label="Time in force" name="timeInForce" rules={[{ required: true, message: 'TIF is required' }]}>
-                  <Select
-                    placeholder="TIF"
-                    options={[
-                      { value: 'day', label: 'DAY' },
-                      { value: 'gtc', label: 'GTC' },
-                      { value: 'ioc', label: 'IOC' },
-                      { value: 'fok', label: 'FOK' },
-                    ]}
-                  />
-                </Form.Item>
-
-                <Form.Item label="Venue" name="venue" rules={[{ required: true, message: 'Venue is required' }]}>
-                  <Select
-                    placeholder="Venue"
-                    options={[
-                      { value: 'MOCK', label: 'MOCK' },
-                      { value: 'MOCK_ALT', label: 'MOCK_ALT' },
-                    ]}
-                  />
-                </Form.Item>
+            {advancedOpen ? (
+              <div
+                className="order-entry-form__panel order-entry-form__panel--advanced"
+                id="order-entry-advanced-panel"
+              >
+                <div className="order-entry-form__section order-entry-form__section--advanced-block">
+                  <div className="order-entry-form__section-title">Advanced</div>
+                  <Form.Item label="Client order ID" name="clientOrderId">
+                    <Input allowClear placeholder="Optional — leave blank to auto-assign" className="order-entry-input--mono" maxLength={64} />
+                  </Form.Item>
+                  <Form.Item label="Execution profile" name="executionProfile">
+                    <Select
+                      allowClear
+                      placeholder="Default"
+                      options={[
+                        { value: 'sweep_mid', label: 'Sweep / mid' },
+                        { value: 'passive', label: 'Passive peg' },
+                        { value: 'dark_first', label: 'Dark first' },
+                      ]}
+                    />
+                  </Form.Item>
+                  <Form.Item label="Post-only" name="postOnly" valuePropName="checked">
+                    <Switch />
+                  </Form.Item>
+                  <Form.Item label="Min display qty" name="minQuantity">
+                    <InputNumber min={0} step={1} controls className="order-entry-control--numeric" style={{ width: '100%' }} placeholder="Optional" />
+                  </Form.Item>
+                </div>
               </div>
-            </div>
+            ) : null}
           </div>
 
           <div className="order-entry-actions">
