@@ -93,7 +93,7 @@ To drive the workspace from the stream server instead of the in-browser mock, se
 - [x] **Order submit form** — `OrderEntryForm` ticket (`client/src/features/order-entry/`) with validation and submit into the blotter / stream ingestion path  
 - [x] **`GET /orders/:id/audit`** — HTTP API returning persisted `order_audit_events` for an order (for bottom audit tree / detail)  
 - [x] **Audit trail (mocked for now)** — tree-table style audit surface for hierarchy previews (mock tree-table UI) plus stream-derived audit domain in store/mappers
-- [ ] **Configure AI filter** — stats strip still uses local `filterOrdersByTextQuery`; **`POST /nlp/parse-order-filter`** + [`fetchParsedOrderFilterFromNlp`](client/src/features/blotter/api/parseOrderFilterNlpApi.ts) are ready to wire OpenAI output into that flow when you hook the UI  
+- [x] **Configure AI filter** — stats strip **Apply** calls **`POST /nlp/parse-order-filter`** via [`fetchParsedOrderFilterFromNlp`](client/src/features/blotter/api/parseOrderFilterNlpApi.ts); rows are pre-filtered with [`filterOrdersByParsedFilter`](client/src/features/blotter/nlp/applyParsedOrderFilter.ts) in [`PrimeBlotterApp`](client/src/PrimeBlotterApp.tsx) (`filterOrdersByTextQuery` removed from that path)  
 
 ## Main todos
 

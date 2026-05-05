@@ -1,16 +1,31 @@
 import { safeParseParsedOrderFilter, type ParsedOrderFilter } from '../../../shared/nlp/parsedOrderFilter.js'
 import { getOpenAIClient, openaiModel } from './openaiClient.js'
 
-const SYSTEM_PROMPT = `You convert natural-language blotter filter requests into a single JSON object.
+const SYSTEM_PROMPT = `You convert natural-language **order blotter filter** requests into one JSON object the UI will use to narrow rows.
 
-Rules:
+Output rules:
 - Output ONLY valid JSON (no markdown fences, no commentary).
-- Use keys only from this vocabulary; omit keys you cannot infer.
-- Use lowercase for side: "buy" | "sell".
-- status and timeInForce must be arrays of allowed string literals when present.
-- For "open" or "working" orders, use status: ["pending_new","new","partially_filled"] as appropriate.
-- If the user gives no usable filter constraints, return {}.
-- Never invent symbols or ids; if unclear, omit those fields.
+- Use only these top-level keys when relevant: symbol, side, status, timeInForce, venue, account, counterparty, clientOrderId, idContains, rejectionReasonContains, quantityMin, quantityMax, filledQuantityMin, filledQuantityMax, limitPriceMin, limitPriceMax, pnlMin, pnlMax, createdAtOrAfter, createdAtOrBefore, updatedAtOrAfter, updatedAtOrBefore, confidence.
+- **Do not return {}** if the user asked to narrow by anything above (e.g. status, side, venue, symbol). Return {} only for greetings, thanks, or text with **no** filter intent at all.
+
+Field rules:
+- side: lowercase string "buy" or "sell" only.
+- status: array of one or more of: pending_new, new, partially_filled, filled, cancelled, rejected, replaced.
+- timeInForce: array of one or more of: day, gtc, ioc, fok, at_open, at_close.
+- Map common phrases to status arrays:
+  - "open" / "working" / "live" / "still open" → ["pending_new","new","partially_filled"]
+  - "rejected" / "rejections" → ["rejected"]
+  - "filled" / "done" (when meaning fully executed) → ["filled"]
+  - "cancelled" / "canceled" → ["cancelled"]
+- venue: uppercase strings like MOCK or MOCK_ALT when the user names them.
+- symbol: uppercase ticker when the user names one (e.g. AAPL). Do not invent a symbol if none is named.
+- For numeric hints ("at least 500", "qty over 1000") use quantityMin / quantityMax as numbers.
+
+Examples (input → minimal good JSON):
+- "show only rejected orders" → {"status":["rejected"]}
+- "sell orders on MOCK" → {"side":"sell","venue":"MOCK"}
+- "working orders" → {"status":["pending_new","new","partially_filled"]}
+- "AAPL buy orders still open" → {"symbol":"AAPL","side":"buy","status":["pending_new","new","partially_filled"]}
 `
 
 export type ParseOrderFilterNlpResult =

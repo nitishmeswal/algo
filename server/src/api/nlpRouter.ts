@@ -8,8 +8,6 @@ nlpRouter.post('/parse-order-filter', async (req: Request, res: Response) => {
   const text = typeof req.body?.text === 'string' ? req.body.text : ''
   const result = await parseOrderFilterFromNlp(text)
 
-  console.log(result)
-
   // #TODO: remove nested ternaries
   if (!result.ok) {
     const status =

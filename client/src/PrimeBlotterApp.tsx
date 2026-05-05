@@ -5,9 +5,9 @@ import {
   MenuUnfoldOutlined,
   UserOutlined,
 } from '@ant-design/icons'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Key } from 'react'
-import { Alert, Avatar, Button, Card, Dropdown, Input, Layout, Menu, Space, Typography, message } from 'antd'
+import { Alert, Avatar, Button, Card, Dropdown, Input, Layout, Menu, Space, Tag, Typography, message } from 'antd'
 import { useBlotterLiveBootstrap } from './features/blotter/realtime/useBlotterLiveBootstrap'
 import { useBlotterWebSocketStream } from './features/blotter/realtime/useBlotterWebSocketStream'
 import OrderEntryForm from './features/order-entry/OrderEntryForm'
@@ -16,7 +16,10 @@ import { amendOrder, cancelOrders, isOrderOpenForAction } from './features/blott
 import { useBlotterStore } from './features/blotter/store/useBlotterStore'
 import { eodSchemaFacts, selectionSummaryFacts } from './features/insights/deterministicInsights'
 import { EodReportModal, SelectionSummaryModal } from './features/insights/InsightModals'
-import { filterOrdersByTextQuery } from './features/blotter/nlp/filterOrdersByTextQuery'
+import { fetchParsedOrderFilterFromNlp } from './features/blotter/api/parseOrderFilterNlpApi'
+import { filterOrdersByParsedFilter } from './features/blotter/nlp/applyParsedOrderFilter'
+import { appliedFilterChips } from './features/blotter/nlp/nlpFilterSummary'
+import { isParsedOrderFilterEmpty, type ParsedOrderFilter } from './features/blotter/nlp/parsedOrderFilter'
 import { orderId, type Order } from './features/blotter/types'
 import AuditTrailTable, { type AuditTrailTableProps } from './features/table/AuditTrailTable'
 import BlotterTable from './features/table/BlotterTable'
@@ -25,6 +28,9 @@ import { Link } from 'react-router-dom'
 import './App.css'
 
 const ORDER_FORM_OPEN_KEY = 'prime-blotter-order-form-open'
+
+/** Set to `true` to re-enable Summarize + EOD report in the stats strip. */
+const STATS_AI_ACTIONS_ENABLED = false
 
 const BLOTTER_WS_URL = (import.meta.env.VITE_BLOTTER_WS_URL as string | undefined)?.trim() ?? ''
 const USE_BLOTTER_WEBSOCKET = BLOTTER_WS_URL.length > 0
@@ -64,7 +70,14 @@ function PrimeBlotterApp() {
   const [auditFocusKey, setAuditFocusKey] = useState<Key | null>(null)
   const [selectionModalOpen, setSelectionModalOpen] = useState(false)
   const [eodModalOpen, setEodModalOpen] = useState(false)
-  const [nlpQuery, setNlpQuery] = useState('')
+  /** Draft text for the AI filter box; applied only after **Apply** (OpenAI + Zod on server). */
+  const [nlpFilterDraft, setNlpFilterDraft] = useState('')
+  /** Last successfully applied structured filter; `null` means show full book for this path. */
+  const [nlpAppliedFilter, setNlpAppliedFilter] = useState<ParsedOrderFilter | null>(null)
+  /** Text last successfully sent to Apply (trimmed); used for draft vs applied hint. */
+  const [nlpLastAppliedQuery, setNlpLastAppliedQuery] = useState('')
+  const [nlpFilterInlineError, setNlpFilterInlineError] = useState<string | null>(null)
+  const [nlpApplyLoading, setNlpApplyLoading] = useState(false)
   const [amendModalOpen, setAmendModalOpen] = useState(false)
   const [orderFormOpen, setOrderFormOpen] = useState(readOrderFormOpen)
   const [topNavKey, setTopNavKey] = useState<string>('blotter')
@@ -98,9 +111,41 @@ function PrimeBlotterApp() {
   )
 
   const filteredOrders = useMemo(
-    () => filterOrdersByTextQuery(orders, nlpQuery),
-    [orders, nlpQuery],
+    () => filterOrdersByParsedFilter(orders, nlpAppliedFilter),
+    [orders, nlpAppliedFilter],
   )
+
+  const nlpAppliedChips = useMemo(() => {
+    if (nlpAppliedFilter != null && !isParsedOrderFilterEmpty(nlpAppliedFilter)) {
+      return appliedFilterChips(nlpAppliedFilter)
+    }
+    return []
+  }, [nlpAppliedFilter])
+
+  const nlpAppliedShowFullBookHint = nlpLastAppliedQuery !== '' && nlpAppliedChips.length === 0
+
+  const nlpDraftDiffersFromApplied = useMemo(() => {
+    if (nlpLastAppliedQuery === '') return false
+    return nlpFilterDraft.trim() !== nlpLastAppliedQuery.trim()
+  }, [nlpFilterDraft, nlpLastAppliedQuery])
+
+  const handleNlpApply = useCallback(async () => {
+    const text = nlpFilterDraft.trim()
+    if (!text) return
+    setNlpApplyLoading(true)
+    setNlpFilterInlineError(null)
+    try {
+      const filter = await fetchParsedOrderFilterFromNlp(text)
+      setNlpAppliedFilter(isParsedOrderFilterEmpty(filter) ? null : filter)
+      setNlpLastAppliedQuery(text)
+      void message.success('Filter applied')
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'NLP filter failed'
+      setNlpFilterInlineError(msg)
+    } finally {
+      setNlpApplyLoading(false)
+    }
+  }, [nlpFilterDraft])
 
   /** Remount virtual table once per bootstrap phase, not on every new `orderId` (avoids scroll jumping to top on each WS delta). */
   const blotterTableMountKey = USE_BLOTTER_WEBSOCKET
@@ -303,9 +348,9 @@ function PrimeBlotterApp() {
               </div>
             </div>
             <div className="stats-ai-panel" role="region" aria-label="AI actions">
-              <div className="stats-ai-card">
-                <div className="stats-ai-card__row">
-                  <div className="stats-ai-card__actions-col">
+              <div className="stats-ai-strip">
+                <div className="stats-ai-strip__row">
+                  <div className="stats-ai-strip__actions-col">
                     <div className="stats-nlp-label-row">
                       <Sparkles className="stats-nlp-label__sparkle" size={14} aria-hidden strokeWidth={2} />
                       <span className="stats-item-label stats-nlp-label__text">AI actions</span>
@@ -314,38 +359,109 @@ function PrimeBlotterApp() {
                       <Button
                         type={selectedRowKeys.length > 0 ? 'primary' : 'default'}
                         ghost={selectedRowKeys.length === 0}
-                        disabled={selectedRowKeys.length === 0}
+                        disabled={!STATS_AI_ACTIONS_ENABLED || selectedRowKeys.length === 0}
                         onClick={() => setSelectionModalOpen(true)}
                         className="ai-tile__action"
-                        title="Summarize selected rows"
+                        title={
+                          STATS_AI_ACTIONS_ENABLED ? 'Summarize selected rows' : 'Summarize (temporarily disabled)'
+                        }
                       >
                         Summarize
                       </Button>
                       <Button
                         type="default"
+                        disabled={!STATS_AI_ACTIONS_ENABLED}
                         onClick={() => setEodModalOpen(true)}
                         className="ai-tile__action"
-                        title="Generate end-of-day report"
+                        title={STATS_AI_ACTIONS_ENABLED ? 'Generate end-of-day report' : 'EOD report (temporarily disabled)'}
                       >
                         EOD report
                       </Button>
                     </div>
                   </div>
-                  <div className="stats-nlp-field stats-nlp-field--in-ai-card">
+                  <div className="stats-nlp-field stats-nlp-field--in-strip">
                     <div className="stats-nlp-label-row">
                       <Sparkles className="stats-nlp-label__sparkle" size={14} aria-hidden strokeWidth={2} />
                       <label className="stats-item-label stats-nlp-label__text" htmlFor="stats-nlp-input">
                         AI filter
                       </label>
                     </div>
-                    <Input
-                      id="stats-nlp-input"
-                      className="stats-nlp-input"
-                      placeholder="Filter table (symbol, id, status, …)"
-                      value={nlpQuery}
-                      onChange={(e) => setNlpQuery(e.target.value)}
-                      allowClear
-                    />
+                    <div className="stats-nlp-apply-row">
+                      <Input
+                        id="stats-nlp-input"
+                        className="stats-nlp-input stats-nlp-input--grow"
+                        placeholder="e.g. AAPL buys still open"
+                        value={nlpFilterDraft}
+                        onChange={(e) => {
+                          setNlpFilterDraft(e.target.value)
+                          setNlpFilterInlineError(null)
+                        }}
+                        onPressEnter={() => void handleNlpApply()}
+                      />
+                      <Button
+                        type="primary"
+                        className="stats-nlp-apply-btn"
+                        loading={nlpApplyLoading}
+                        disabled={nlpFilterDraft.trim() === '' || nlpApplyLoading}
+                        onClick={() => void handleNlpApply()}
+                      >
+                        Apply
+                      </Button>
+                      <Button
+                        className="stats-nlp-clear-btn"
+                        disabled={nlpAppliedFilter == null && nlpFilterDraft.trim() === '' && nlpLastAppliedQuery === ''}
+                        onClick={() => {
+                          setNlpAppliedFilter(null)
+                          setNlpFilterDraft('')
+                          setNlpLastAppliedQuery('')
+                          setNlpFilterInlineError(null)
+                        }}
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                    <div className="stats-nlp-meta" aria-live="polite">
+                      {nlpFilterInlineError ? (
+                        <Typography.Text type="danger" className="stats-nlp-inline-error">
+                          {nlpFilterInlineError}
+                        </Typography.Text>
+                      ) : null}
+                      <div className="stats-nlp-applied-row">
+                        <span className="stats-nlp-applied-prefix">Applied</span>
+                        {nlpAppliedChips.length > 0 ? (
+                          <div className="stats-nlp-chips">
+                            {nlpAppliedChips.map((c) => (
+                              <Tag
+                                key={c.key}
+                                bordered
+                                className={
+                                  c.variant === 'warn'
+                                    ? 'stats-nlp-chip stats-nlp-chip--warn'
+                                    : 'stats-nlp-chip'
+                                }
+                              >
+                                {c.label}
+                              </Tag>
+                            ))}
+                          </div>
+                        ) : nlpAppliedShowFullBookHint ? (
+                          <span className="stats-nlp-applied-none">Full book</span>
+                        ) : (
+                          <span
+                            className="stats-nlp-applied-idle"
+                            title="No filter applied — describe orders in plain language, then Apply."
+                          >
+                            <span className="stats-nlp-applied-none stats-nlp-applied-none--muted">—</span>
+                            <span className="stats-nlp-applied-hint">Describe orders, then Apply.</span>
+                          </span>
+                        )}
+                      </div>
+                      {nlpDraftDiffersFromApplied ? (
+                        <Typography.Text type="warning" className="stats-nlp-draft-hint">
+                          Draft differs from last Apply — table still matches the applied filter.
+                        </Typography.Text>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -411,7 +527,7 @@ function PrimeBlotterApp() {
             </Typography.Title>
             <div className="order-table-heading-actions">
               <Typography.Text type="secondary" className="order-table-heading-actions__hint">
-                Open orders only. Checks = bulk actions; row click = audit. Footer shows Checked vs Audit row.
+                Open orders only. Checks = bulk actions; row click = audit. AI filter: describe intent, Apply (OpenAI), Clear to reset. Footer shows Checked vs Audit row.
               </Typography.Text>
               <Space wrap className="order-table-heading-actions__buttons" size={6}>
                 <Button
