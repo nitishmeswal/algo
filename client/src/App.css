@@ -289,13 +289,13 @@ a.page-header-brand--link:hover .page-header-title {
 
 .order-entry-form__section-title {
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.38);
+  color: rgba(255, 255, 255, 0.86);
   margin-bottom: 6px;
   padding-bottom: 4px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .order-entry-form.order-entry-form {
@@ -1028,9 +1028,9 @@ a.page-header-brand--link:hover .page-header-title {
   width: 100%;
 }
 
-/* Widen the ticket column when Advanced is open — extra fields sit to the right, no vertical scroll. */
+/* Advanced opens into its own middle column; keep base ticket width stable. */
 .order-workspace:not(.order-workspace--form-collapsed):has(.order-entry-section--advanced) {
-  grid-template-columns: minmax(480px, clamp(560px, 52vw, 820px)) minmax(0, 1fr);
+  grid-template-columns: clamp(340px, 22vw, 420px) minmax(0, 320px) minmax(0, 1fr);
 }
 
 .order-workspace > .order-workspace-label {
@@ -1046,6 +1046,10 @@ a.page-header-brand--link:hover .page-header-title {
 .order-workspace-label--table {
   grid-column: 2;
   grid-row: 1;
+}
+
+.order-workspace:not(.order-workspace--form-collapsed):has(.order-entry-section--advanced) .order-workspace-label--table {
+  grid-column: 3;
 }
 
 .order-workspace .order-workspace-label--form.surface-section-label-row {
@@ -1106,6 +1110,7 @@ a.page-header-brand--link:hover .page-header-title {
 }
 
 .order-workspace:not(.order-workspace--form-collapsed):has(.order-entry-section--advanced) .order-entry-section {
+  grid-column: 1 / span 2;
   max-width: none;
 }
 
@@ -1117,6 +1122,10 @@ a.page-header-brand--link:hover .page-header-title {
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+.order-workspace:not(.order-workspace--form-collapsed):has(.order-entry-section--advanced) .order-table-section {
+  grid-column: 3;
 }
 
 .order-workspace .order-entry-section > .app-card,
@@ -1159,13 +1168,51 @@ a.page-header-brand--link:hover .page-header-title {
   min-width: 0;
 }
 
+.order-workspace:not(.order-workspace--form-collapsed):has(.order-entry-section--advanced) .order-entry-form__panel--core {
+  flex: 0 0 clamp(340px, 22vw, 420px);
+}
+
+.order-workspace:not(.order-workspace--form-collapsed):has(.order-entry-section--advanced) .order-entry-form__panels {
+  display: grid;
+  grid-template-columns: clamp(340px, 22vw, 420px) minmax(0, 1fr);
+  column-gap: 18px;
+  align-items: stretch;
+}
+
+.order-workspace:not(.order-workspace--form-collapsed):has(.order-entry-section--advanced) .order-entry-form__panel--core {
+  width: clamp(340px, 22vw, 420px);
+  max-width: clamp(340px, 22vw, 420px);
+}
+
+.order-workspace:not(.order-workspace--form-collapsed):has(.order-entry-section--advanced) .order-entry-form__panel--advanced {
+  width: auto;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
 .order-entry-form__panel--advanced {
   flex: 0 0 auto;
-  width: clamp(200px, 26vw, 260px);
-  min-width: 188px;
-  padding-left: 14px;
-  margin-left: 10px;
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  width: auto;
+  min-width: 0;
+  box-sizing: border-box;
+  padding-right: 10px;
+}
+
+.order-entry-form__panel--advanced .ant-form-item,
+.order-entry-form__panel--advanced .ant-form-item-control,
+.order-entry-form__panel--advanced .ant-form-item-control-input,
+.order-entry-form__panel--advanced .ant-form-item-control-input-content {
+  width: 100%;
+  min-width: 0;
+}
+
+.order-entry-form__panel--advanced .ant-input,
+.order-entry-form__panel--advanced .ant-input-affix-wrapper,
+.order-entry-form__panel--advanced .ant-picker,
+.order-entry-form__panel--advanced .ant-select,
+.order-entry-form__panel--advanced .ant-input-number {
+  width: 100% !important;
+  max-width: 100%;
   box-sizing: border-box;
 }
 

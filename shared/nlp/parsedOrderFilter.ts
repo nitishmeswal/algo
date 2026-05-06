@@ -12,7 +12,7 @@ export const ORDER_STATUS_VALUES = [
 ] as const
 
 /** Matches `TimeInForce` literals — keep in sync with blotter types. */
-export const TIME_IN_FORCE_VALUES = ['day', 'gtc', 'ioc', 'fok', 'at_open', 'at_close'] as const
+export const TIME_IN_FORCE_VALUES = ['day', 'gtc', 'gtd', 'ioc', 'fok', 'at_open', 'at_close'] as const
 
 const sideSchema = z.enum(['buy', 'sell'])
 

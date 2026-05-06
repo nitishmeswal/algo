@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AutoComplete, Button, Card, Form, Input, InputNumber, Select, Switch, message } from 'antd'
+import { AutoComplete, Button, Card, Form, Input, InputNumber, Select, message } from 'antd'
 import { useBlotterStore } from '../blotter/store/useBlotterStore'
 import type { OrderEntryPayload } from '../blotter/api/submitOrder'
 import { submitOrder } from '../blotter/api/submitOrder'
@@ -18,15 +18,25 @@ export default function OrderEntryForm() {
   )
 
   const symbolInput = Form.useWatch('symbol', form) as string | undefined
+  const orderType = Form.useWatch('orderType', form) as OrderEntryPayload['orderType'] | undefined
+  const timeInForce = Form.useWatch('timeInForce', form) as OrderEntryPayload['timeInForce'] | undefined
   const symbolOptions = useMemo(
     () => buildSymbolTypeaheadOptions(typeof symbolInput === 'string' ? symbolInput : '', bookSymbols),
     [symbolInput, bookSymbols],
   )
 
   const onFinish = async (values: OrderEntryPayload) => {
+    const normalizedOrderType = values.orderType ?? 'limit'
+    const normalized: OrderEntryPayload = {
+      ...values,
+      orderType: normalizedOrderType,
+      limitPrice: normalizedOrderType === 'market' || normalizedOrderType === 'stop' ? undefined : values.limitPrice,
+      stopPrice: normalizedOrderType === 'stop' || normalizedOrderType === 'stop_limit' ? values.stopPrice : undefined,
+      expireAt: values.timeInForce === 'gtd' ? values.expireAt : undefined,
+    }
     setSubmitting(true)
     try {
-      await submitOrder(values)
+      await submitOrder(normalized)
       void message.success('Order accepted')
       form.resetFields()
     } catch {
@@ -63,7 +73,7 @@ export default function OrderEntryForm() {
           layout="vertical"
           size="small"
           requiredMark={false}
-          initialValues={{ postOnly: false }}
+          initialValues={{ orderType: 'limit' }}
           onFinish={onFinish}
         >
           <div className="order-entry-form__panels">
@@ -112,9 +122,46 @@ export default function OrderEntryForm() {
                       <InputNumber min={1} step={100} controls className="order-entry-control--numeric" style={{ width: '100%' }} />
                     </Form.Item>
 
-                    <Form.Item label="Limit price" name="limitPrice">
+                    <Form.Item label="Order type" name="orderType" rules={[{ required: true, message: 'Order type is required' }]}>
+                      <Select
+                        options={[
+                          { value: 'limit', label: 'Limit' },
+                          { value: 'market', label: 'Market' },
+                          { value: 'stop', label: 'Stop' },
+                          { value: 'stop_limit', label: 'Stop limit' },
+                        ]}
+                      />
+                    </Form.Item>
+
+                    <Form.Item
+                      label="Limit price"
+                      name="limitPrice"
+                      dependencies={['orderType']}
+                      rules={[
+                        ({ getFieldValue }) => ({
+                          validator(_, value) {
+                            const ot = getFieldValue('orderType')
+                            const requiresLimit = ot === 'limit' || ot === 'stop_limit'
+                            if (requiresLimit && (value == null || value === '')) {
+                              return Promise.reject(new Error('Limit price is required for limit/stop-limit'))
+                            }
+                            return Promise.resolve()
+                          },
+                        }),
+                      ]}
+                    >
                       <InputNumber min={0.01} step={0.01} controls className="order-entry-control--numeric" style={{ width: '100%' }} />
                     </Form.Item>
+
+                    {(orderType === 'stop' || orderType === 'stop_limit') ? (
+                      <Form.Item
+                        label="Stop price"
+                        name="stopPrice"
+                        rules={[{ required: true, message: 'Stop price is required for stop orders' }]}
+                      >
+                        <InputNumber min={0.01} step={0.01} controls className="order-entry-control--numeric" style={{ width: '100%' }} />
+                      </Form.Item>
+                    ) : null}
 
                     <Form.Item label="Time in force" name="timeInForce" rules={[{ required: true, message: 'TIF is required' }]}>
                       <Select
@@ -122,6 +169,7 @@ export default function OrderEntryForm() {
                         options={[
                           { value: 'day', label: 'DAY' },
                           { value: 'gtc', label: 'GTC' },
+                          { value: 'gtd', label: 'GTD' },
                           { value: 'ioc', label: 'IOC' },
                           { value: 'fok', label: 'FOK' },
                         ]}
@@ -150,25 +198,48 @@ export default function OrderEntryForm() {
                 <div className="order-entry-form__section order-entry-form__section--advanced-block">
                   <div className="order-entry-form__section-title">Advanced</div>
                   <Form.Item label="Client order ID" name="clientOrderId">
-                    <Input allowClear placeholder="Optional — leave blank to auto-assign" className="order-entry-input--mono" maxLength={64} />
+                    <Input placeholder="Optional — leave blank to auto-assign" className="order-entry-input--mono" maxLength={64} />
                   </Form.Item>
-                  <Form.Item label="Execution profile" name="executionProfile">
-                    <Select
-                      allowClear
-                      placeholder="Default"
-                      options={[
-                        { value: 'sweep_mid', label: 'Sweep / mid' },
-                        { value: 'passive', label: 'Passive peg' },
-                        { value: 'dark_first', label: 'Dark first' },
+                  <Form.Item label="Strategy tag" name="strategyTag">
+                    <Input placeholder="e.g. earnings-reversion" className="order-entry-input--mono" maxLength={48} />
+                  </Form.Item>
+                  <Form.Item
+                    label="Display qty"
+                    name="displayQuantity"
+                    dependencies={['quantity']}
+                    rules={[
+                      ({ getFieldValue }) => ({
+                        validator(_, value) {
+                          if (value == null) return Promise.resolve()
+                          const q = Number(getFieldValue('quantity'))
+                          if (Number.isFinite(q) && value > q) {
+                            return Promise.reject(new Error('Display qty cannot exceed total quantity'))
+                          }
+                          return Promise.resolve()
+                        },
+                      }),
+                    ]}
+                  >
+                    <InputNumber min={1} step={1} controls className="order-entry-control--numeric" style={{ width: '100%' }} placeholder="Optional iceberg size" />
+                  </Form.Item>
+                  {timeInForce === 'gtd' ? (
+                    <Form.Item
+                      label="Expire at"
+                      name="expireAt"
+                      rules={[
+                        { required: true, message: 'Expire timestamp is required when TIF = GTD' },
+                        {
+                          validator(_, value) {
+                            if (typeof value !== 'string' || value.trim() === '') return Promise.resolve()
+                            const n = Date.parse(value)
+                            return Number.isNaN(n) ? Promise.reject(new Error('Use a valid date/time')) : Promise.resolve()
+                          },
+                        },
                       ]}
-                    />
-                  </Form.Item>
-                  <Form.Item label="Post-only" name="postOnly" valuePropName="checked">
-                    <Switch />
-                  </Form.Item>
-                  <Form.Item label="Min display qty" name="minQuantity">
-                    <InputNumber min={0} step={1} controls className="order-entry-control--numeric" style={{ width: '100%' }} placeholder="Optional" />
-                  </Form.Item>
+                    >
+                      <Input type="datetime-local" />
+                    </Form.Item>
+                  ) : null}
                 </div>
               </div>
             ) : null}

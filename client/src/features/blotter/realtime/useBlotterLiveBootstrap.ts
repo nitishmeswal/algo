@@ -16,7 +16,7 @@ const ORDER_STATUSES: readonly OrderStatus[] = [
   'replaced',
 ]
 
-const TIME_IN_FORCE: readonly TimeInForce[] = ['day', 'gtc', 'ioc', 'fok', 'at_open', 'at_close']
+const TIME_IN_FORCE: readonly TimeInForce[] = ['day', 'gtc', 'gtd', 'ioc', 'fok', 'at_open', 'at_close']
 
 function isSide(v: unknown): v is Side {
   return typeof v === 'string' && (SIDES as readonly string[]).includes(v)
