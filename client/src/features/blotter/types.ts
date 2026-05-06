@@ -13,6 +13,9 @@ export function orderId(value: string): OrderId {
 /** Buy or sell direction for an order. */
 export type Side = 'buy' | 'sell'
 
+/** Entry style for an order. */
+export type OrderType = 'market' | 'limit' | 'stop' | 'stop_limit'
+
 /** Lifecycle states an order can move through in the blotter. */
 export type OrderStatus =
   | 'pending_new'
@@ -24,7 +27,7 @@ export type OrderStatus =
   | 'replaced'
 
 /** Execution constraint defining how long an order remains active. */
-export type TimeInForce = 'day' | 'gtc' | 'ioc' | 'fok' | 'at_open' | 'at_close'
+export type TimeInForce = 'day' | 'gtc' | 'gtd' | 'ioc' | 'fok' | 'at_open' | 'at_close'
 
 /** Canonical order snapshot as shown on the blotter and in detail views. */
 export type Order = {
@@ -32,9 +35,18 @@ export type Order = {
   clientOrderId?: string
   symbol: string
   side: Side
+  orderType?: OrderType
   quantity: number
   /** Limit price; undefined for market-style orders in mocks. */
   limitPrice?: number
+  /** Stop trigger for stop/stop-limit orders. */
+  stopPrice?: number
+  /** ISO timestamp when TIF=GTD. */
+  expireAt?: string
+  /** Optional attribution tag (desk/strategy bucket). */
+  strategyTag?: string
+  /** Visible quantity for iceberg-style behavior in demos. */
+  displayQuantity?: number
   filledQuantity: number
   /** Volume-weighted average fill price when partially or fully filled. */
   averageFillPrice?: number

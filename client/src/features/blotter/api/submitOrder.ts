@@ -2,6 +2,7 @@ import { createClientOrderId, createOrderId } from '../ids'
 import { useBlotterStore } from '../store/useBlotterStore'
 import {
   streamSequence,
+  type OrderType,
   type Order,
   type OrderCreatedEvent,
   type Side,
@@ -21,16 +22,17 @@ export type OrderEntryPayload = {
   counterparty?: string
   symbol: string
   side: Side
+  orderType?: OrderType
   quantity: number
   limitPrice?: number
+  stopPrice?: number
   timeInForce: TimeInForce
+  expireAt?: string
   venue?: string
   /** Optional ClOrdID; when empty, a synthetic id is generated. */
   clientOrderId?: string
-  /** Advanced-only — reserved for future routing / OMS wiring. */
-  executionProfile?: string
-  postOnly?: boolean
-  minQuantity?: number
+  strategyTag?: string
+  displayQuantity?: number
 }
 
 function nextSequence() {
@@ -44,13 +46,23 @@ function buildOrder(payload: OrderEntryPayload): Order {
   const rnd = () => Math.random()
   const id = createOrderId(rnd)
   const clientTrim = payload.clientOrderId?.trim()
+  const strategyTag = payload.strategyTag?.trim()
+  const normalizedOrderType = payload.orderType ?? 'limit'
+  const limitPrice = normalizedOrderType === 'market' || normalizedOrderType === 'stop' ? undefined : payload.limitPrice
+  const stopPrice = normalizedOrderType === 'stop' || normalizedOrderType === 'stop_limit' ? payload.stopPrice : undefined
+  const expireAt = payload.timeInForce === 'gtd' && payload.expireAt ? new Date(payload.expireAt).toISOString() : undefined
   return {
     id,
     clientOrderId: clientTrim && clientTrim.length > 0 ? clientTrim : createClientOrderId(rnd),
     symbol: payload.symbol.trim().toUpperCase(),
     side: payload.side,
+    orderType: normalizedOrderType,
     quantity: payload.quantity,
-    limitPrice: payload.limitPrice,
+    limitPrice,
+    stopPrice,
+    expireAt,
+    strategyTag: strategyTag && strategyTag.length > 0 ? strategyTag : undefined,
+    displayQuantity: payload.displayQuantity,
     filledQuantity: 0,
     pnl: 0,
     status: 'new',
