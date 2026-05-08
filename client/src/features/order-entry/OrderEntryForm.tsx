@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
-import { AutoComplete, Button, Card, Form, Input, InputNumber, Select, message } from 'antd'
+import { AutoComplete, Button, Card, Form, Input, InputNumber, Select, Typography, message } from 'antd'
 import { useBlotterStore } from '../blotter/store/useBlotterStore'
 import type { OrderEntryPayload } from '../blotter/api/submitOrder'
 import { submitOrder } from '../blotter/api/submitOrder'
+import { buildOrderPreviewLine, orderPreviewIncomplete } from './orderPreviewLine'
 import { buildSymbolTypeaheadOptions } from './symbolTypeahead'
 
 export default function OrderEntryForm() {
@@ -20,10 +21,53 @@ export default function OrderEntryForm() {
   const symbolInput = Form.useWatch('symbol', form) as string | undefined
   const orderType = Form.useWatch('orderType', form) as OrderEntryPayload['orderType'] | undefined
   const timeInForce = Form.useWatch('timeInForce', form) as OrderEntryPayload['timeInForce'] | undefined
+  const watchSide = Form.useWatch('side', form)
+  const watchQty = Form.useWatch('quantity', form)
+  const watchLimit = Form.useWatch('limitPrice', form)
+  const watchStop = Form.useWatch('stopPrice', form)
+  const watchVenue = Form.useWatch('venue', form)
+  const watchExpire = Form.useWatch('expireAt', form)
+  const watchDisplayQty = Form.useWatch('displayQuantity', form)
+  const watchStrategy = Form.useWatch('strategyTag', form)
+  const watchClid = Form.useWatch('clientOrderId', form)
   const symbolOptions = useMemo(
     () => buildSymbolTypeaheadOptions(typeof symbolInput === 'string' ? symbolInput : '', bookSymbols),
     [symbolInput, bookSymbols],
   )
+
+  const previewPayload = useMemo(
+    (): Partial<OrderEntryPayload> => ({
+      symbol: typeof symbolInput === 'string' ? symbolInput : '',
+      side: watchSide,
+      quantity: watchQty as number | undefined,
+      orderType: orderType ?? 'limit',
+      limitPrice: watchLimit as number | undefined,
+      stopPrice: watchStop as number | undefined,
+      timeInForce,
+      venue: typeof watchVenue === 'string' ? watchVenue : undefined,
+      expireAt: typeof watchExpire === 'string' ? watchExpire : undefined,
+      displayQuantity: watchDisplayQty as number | undefined,
+      strategyTag: typeof watchStrategy === 'string' ? watchStrategy : undefined,
+      clientOrderId: typeof watchClid === 'string' ? watchClid : undefined,
+    }),
+    [
+      symbolInput,
+      watchSide,
+      watchQty,
+      orderType,
+      watchLimit,
+      watchStop,
+      timeInForce,
+      watchVenue,
+      watchExpire,
+      watchDisplayQty,
+      watchStrategy,
+      watchClid,
+    ],
+  )
+
+  const orderPreviewLine = useMemo(() => buildOrderPreviewLine(previewPayload), [previewPayload])
+  const previewIncomplete = useMemo(() => orderPreviewIncomplete(previewPayload), [previewPayload])
 
   const onFinish = async (values: OrderEntryPayload) => {
     const normalizedOrderType = values.orderType ?? 'limit'
@@ -66,6 +110,9 @@ export default function OrderEntryForm() {
               {advancedOpen ? 'Hide advanced' : 'Advanced'}
             </Button>
           </div>
+          <Typography.Text type="secondary" className="order-entry-form__band-hint">
+            Defaults: limit · DAY — change type, TIF, stops, and tags in Advanced.
+          </Typography.Text>
         </div>
         <Form
           className="order-entry-form"
@@ -73,7 +120,7 @@ export default function OrderEntryForm() {
           layout="vertical"
           size="small"
           requiredMark={false}
-          initialValues={{ orderType: 'limit' }}
+          initialValues={{ orderType: 'limit', timeInForce: 'day', venue: 'MOCK' }}
           onFinish={onFinish}
         >
           <div className="order-entry-form__panels">
@@ -122,59 +169,27 @@ export default function OrderEntryForm() {
                       <InputNumber min={1} step={100} controls className="order-entry-control--numeric" style={{ width: '100%' }} />
                     </Form.Item>
 
-                    <Form.Item label="Order type" name="orderType" rules={[{ required: true, message: 'Order type is required' }]}>
-                      <Select
-                        options={[
-                          { value: 'limit', label: 'Limit' },
-                          { value: 'market', label: 'Market' },
-                          { value: 'stop', label: 'Stop' },
-                          { value: 'stop_limit', label: 'Stop limit' },
-                        ]}
-                      />
-                    </Form.Item>
-
-                    <Form.Item
-                      label="Limit price"
-                      name="limitPrice"
-                      dependencies={['orderType']}
-                      rules={[
-                        ({ getFieldValue }) => ({
-                          validator(_, value) {
-                            const ot = getFieldValue('orderType')
-                            const requiresLimit = ot === 'limit' || ot === 'stop_limit'
-                            if (requiresLimit && (value == null || value === '')) {
-                              return Promise.reject(new Error('Limit price is required for limit/stop-limit'))
-                            }
-                            return Promise.resolve()
-                          },
-                        }),
-                      ]}
-                    >
-                      <InputNumber min={0.01} step={0.01} controls className="order-entry-control--numeric" style={{ width: '100%' }} />
-                    </Form.Item>
-
-                    {(orderType === 'stop' || orderType === 'stop_limit') ? (
+                    {(orderType === 'limit' || orderType === 'stop_limit' || orderType === undefined) ? (
                       <Form.Item
-                        label="Stop price"
-                        name="stopPrice"
-                        rules={[{ required: true, message: 'Stop price is required for stop orders' }]}
+                        label="Limit price"
+                        name="limitPrice"
+                        dependencies={['orderType']}
+                        rules={[
+                          ({ getFieldValue }) => ({
+                            validator(_, value) {
+                              const ot = getFieldValue('orderType') ?? 'limit'
+                              const requiresLimit = ot === 'limit' || ot === 'stop_limit'
+                              if (requiresLimit && (value == null || value === '')) {
+                                return Promise.reject(new Error('Limit price is required for limit/stop-limit'))
+                              }
+                              return Promise.resolve()
+                            },
+                          }),
+                        ]}
                       >
                         <InputNumber min={0.01} step={0.01} controls className="order-entry-control--numeric" style={{ width: '100%' }} />
                       </Form.Item>
                     ) : null}
-
-                    <Form.Item label="Time in force" name="timeInForce" rules={[{ required: true, message: 'TIF is required' }]}>
-                      <Select
-                        placeholder="TIF"
-                        options={[
-                          { value: 'day', label: 'DAY' },
-                          { value: 'gtc', label: 'GTC' },
-                          { value: 'gtd', label: 'GTD' },
-                          { value: 'ioc', label: 'IOC' },
-                          { value: 'fok', label: 'FOK' },
-                        ]}
-                      />
-                    </Form.Item>
 
                     <Form.Item label="Venue" name="venue" rules={[{ required: true, message: 'Venue is required' }]}>
                       <Select
@@ -191,12 +206,58 @@ export default function OrderEntryForm() {
             </div>
 
             {advancedOpen ? (
-              <div
-                className="order-entry-form__panel order-entry-form__panel--advanced"
-                id="order-entry-advanced-panel"
-              >
+              <div className="order-entry-form__panel order-entry-form__panel--advanced" id="order-entry-advanced-panel">
                 <div className="order-entry-form__section order-entry-form__section--advanced-block">
                   <div className="order-entry-form__section-title">Advanced</div>
+                  <Form.Item label="Order type" name="orderType" rules={[{ required: true, message: 'Order type is required' }]}>
+                    <Select
+                      options={[
+                        { value: 'limit', label: 'Limit' },
+                        { value: 'market', label: 'Market' },
+                        { value: 'stop', label: 'Stop' },
+                        { value: 'stop_limit', label: 'Stop limit' },
+                      ]}
+                    />
+                  </Form.Item>
+                  {(orderType === 'stop' || orderType === 'stop_limit') ? (
+                    <Form.Item
+                      label="Stop price"
+                      name="stopPrice"
+                      rules={[{ required: true, message: 'Stop price is required for stop orders' }]}
+                    >
+                      <InputNumber min={0.01} step={0.01} controls className="order-entry-control--numeric" style={{ width: '100%' }} />
+                    </Form.Item>
+                  ) : null}
+                  <Form.Item label="Time in force" name="timeInForce" rules={[{ required: true, message: 'TIF is required' }]}>
+                    <Select
+                      placeholder="TIF"
+                      options={[
+                        { value: 'day', label: 'DAY' },
+                        { value: 'gtc', label: 'GTC' },
+                        { value: 'gtd', label: 'GTD' },
+                        { value: 'ioc', label: 'IOC' },
+                        { value: 'fok', label: 'FOK' },
+                      ]}
+                    />
+                  </Form.Item>
+                  {timeInForce === 'gtd' ? (
+                    <Form.Item
+                      label="Expire at"
+                      name="expireAt"
+                      rules={[
+                        { required: true, message: 'Expire timestamp is required when TIF = GTD' },
+                        {
+                          validator(_, value) {
+                            if (typeof value !== 'string' || value.trim() === '') return Promise.resolve()
+                            const n = Date.parse(value)
+                            return Number.isNaN(n) ? Promise.reject(new Error('Use a valid date/time')) : Promise.resolve()
+                          },
+                        },
+                      ]}
+                    >
+                      <Input type="datetime-local" />
+                    </Form.Item>
+                  ) : null}
                   <Form.Item label="Client order ID" name="clientOrderId">
                     <Input placeholder="Optional — leave blank to auto-assign" className="order-entry-input--mono" maxLength={64} />
                   </Form.Item>
@@ -222,27 +283,19 @@ export default function OrderEntryForm() {
                   >
                     <InputNumber min={1} step={1} controls className="order-entry-control--numeric" style={{ width: '100%' }} placeholder="Optional iceberg size" />
                   </Form.Item>
-                  {timeInForce === 'gtd' ? (
-                    <Form.Item
-                      label="Expire at"
-                      name="expireAt"
-                      rules={[
-                        { required: true, message: 'Expire timestamp is required when TIF = GTD' },
-                        {
-                          validator(_, value) {
-                            if (typeof value !== 'string' || value.trim() === '') return Promise.resolve()
-                            const n = Date.parse(value)
-                            return Number.isNaN(n) ? Promise.reject(new Error('Use a valid date/time')) : Promise.resolve()
-                          },
-                        },
-                      ]}
-                    >
-                      <Input type="datetime-local" />
-                    </Form.Item>
-                  ) : null}
                 </div>
               </div>
             ) : null}
+          </div>
+
+          <div className="order-entry-form__preview" aria-live="polite">
+            <span className="order-entry-form__preview-label">Preview</span>
+            <Typography.Text type="secondary" className="order-entry-form__preview-line">
+              {previewIncomplete ? `Incomplete — ${orderPreviewLine}` : orderPreviewLine}
+            </Typography.Text>
+            <Typography.Text type="secondary" className="order-entry-form__preview-footnote">
+              Simulated accept — no live route.
+            </Typography.Text>
           </div>
 
           <div className="order-entry-actions">

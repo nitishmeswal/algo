@@ -256,6 +256,14 @@ a.page-header-brand--link:hover .page-header-title {
   gap: 10px;
 }
 
+.order-entry-form__band-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.42) !important;
+}
+
 .order-entry-form__band-label {
   display: block;
   font-size: 11px;
@@ -1161,6 +1169,43 @@ a.page-header-brand--link:hover .page-header-title {
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
+}
+
+.order-workspace .order-entry-form__panels {
+  min-height: clamp(280px, 34vh, 400px);
+}
+
+.order-entry-form__preview {
+  flex-shrink: 0;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.order-entry-form__preview-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  margin-bottom: 4px;
+}
+
+.order-entry-form__preview-line {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.72) !important;
+  word-break: break-word;
+}
+
+.order-entry-form__preview-footnote {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px !important;
+  color: rgba(255, 255, 255, 0.38) !important;
 }
 
 .order-entry-form__panel--core {

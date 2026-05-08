@@ -44,6 +44,7 @@ server.listen(PORT, () => {
   console.log(`FlowDesk stream server http://localhost:${PORT}`)
   console.log(`  GET  http://localhost:${PORT}/health`)
   console.log(`  GET  http://localhost:${PORT}/orders`)
+  console.log(`  POST http://localhost:${PORT}/orders`)
   console.log(`  GET  http://localhost:${PORT}/orders/:id`)
   console.log(`  GET  http://localhost:${PORT}/orders/:id/audit`)
   console.log(`  POST http://localhost:${PORT}/nlp/parse-order-filter`)

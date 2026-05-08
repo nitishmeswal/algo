@@ -1,6 +1,7 @@
 export type DbOrderSide = 'buy' | 'sell'
 export type DbOrderStatus = 'pending_new' | 'new' | 'partially_filled' | 'filled' | 'cancelled' | 'rejected' | 'replaced'
-export type DbTimeInForce = 'day' | 'gtc' | 'ioc' | 'fok' | 'at_open' | 'at_close'
+export type DbTimeInForce = 'day' | 'gtc' | 'gtd' | 'ioc' | 'fok' | 'at_open' | 'at_close'
+export type DbOrderType = 'market' | 'limit' | 'stop' | 'stop_limit'
 
 export type OrderRow = {
   id: string
@@ -8,7 +9,12 @@ export type OrderRow = {
   symbol: string
   side: DbOrderSide
   quantity: number
+  order_type: DbOrderType | null
   limit_price: number | null
+  stop_price: number | null
+  expire_at: Date | null
+  strategy_tag: string | null
+  display_quantity: number | null
   filled_quantity: number
   average_fill_price: number | null
   pnl: number
