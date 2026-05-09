@@ -5,15 +5,17 @@ import {
   MenuUnfoldOutlined,
   UserOutlined,
 } from '@ant-design/icons'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Key } from 'react'
-import { Alert, Avatar, Button, Card, Dropdown, Input, Layout, Menu, Space, Tag, Typography, message } from 'antd'
+import { Alert, Avatar, Button, Card, Dropdown, Input, Layout, Menu, Space, Spin, Tag, Typography, message } from 'antd'
 import { useBlotterLiveBootstrap } from './features/blotter/realtime/useBlotterLiveBootstrap'
 import { useBlotterWebSocketStream } from './features/blotter/realtime/useBlotterWebSocketStream'
 import OrderEntryForm from './features/order-entry/OrderEntryForm'
 import AmendOrderModal from './features/blotter/AmendOrderModal'
 import { amendOrder, cancelOrders, isOrderOpenForAction } from './features/blotter/api/orderActions'
+import { fetchBreachInsight } from './features/blotter/api/fetchBreachInsightApi'
 import { useBlotterStore } from './features/blotter/store/useBlotterStore'
+import { aggregatePnlFromOrders, evaluateBreachTransition } from './features/blotter/breachMonitor'
 import { eodSchemaFacts, selectionSummaryFacts } from './features/insights/deterministicInsights'
 import { EodReportModal, SelectionSummaryModal } from './features/insights/InsightModals'
 import { fetchParsedOrderFilterFromNlp } from './features/blotter/api/parseOrderFilterNlpApi'
@@ -21,6 +23,7 @@ import { filterOrdersByParsedFilter } from './features/blotter/nlp/applyParsedOr
 import { appliedFilterChips } from './features/blotter/nlp/nlpFilterSummary'
 import { isParsedOrderFilterEmpty, type ParsedOrderFilter } from './features/blotter/nlp/parsedOrderFilter'
 import { orderId, type Order } from './features/blotter/types'
+import { buildSimulatedBreachEvent, buildSimulatedRecoveryEvent } from './features/blotter/realtime/simulateBreachEvent'
 import AuditTrailTable, { type AuditTrailTableProps } from './features/table/AuditTrailTable'
 import BlotterTable from './features/table/BlotterTable'
 import { Sparkles } from 'lucide-react'
@@ -34,6 +37,7 @@ const STATS_AI_ACTIONS_ENABLED = false
 
 const BLOTTER_WS_URL = (import.meta.env.VITE_BLOTTER_WS_URL as string | undefined)?.trim() ?? ''
 const USE_BLOTTER_WEBSOCKET = BLOTTER_WS_URL.length > 0
+const BREACH_PNL_THRESHOLD = -80_000
 
 const DUMMY_DISPLAY_NAME = 'Chris Taylor'
 
@@ -49,6 +53,17 @@ const STATS_MONEY = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 })
+
+function formatBreachTime(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleTimeString(undefined, {
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
 
 function isTerminalOrder(o: Order): boolean {
   return o.status === 'filled' || o.status === 'cancelled' || o.status === 'rejected'
@@ -105,6 +120,8 @@ function PrimeBlotterApp() {
   const orderIds = useBlotterStore((s) => s.orderIds)
   const ordersById = useBlotterStore((s) => s.ordersById)
   const lastBeat = useBlotterStore((s) => s.lastHeartbeatAt)
+  const lastStreamSequence = useBlotterStore((s) => s.lastStreamSequence)
+  const auditByOrderId = useBlotterStore((s) => s.auditByOrderId)
   const orders = useMemo(
     () => orderIds.map((id) => ordersById[id]).filter(Boolean),
     [orderIds, ordersById],
@@ -209,7 +226,92 @@ function PrimeBlotterApp() {
 
   const amendTargetOrder = selectedOpenOrders.length === 1 ? selectedOpenOrders[0]! : null
 
-  const aggregatePnl = useMemo(() => orders.reduce((s, o) => s + o.pnl, 0), [orders])
+  const aggregatePnl = useMemo(() => aggregatePnlFromOrders(orders), [orders])
+  const [pnlBreached, setPnlBreached] = useState(false)
+  const [breachAcknowledged, setBreachAcknowledged] = useState(false)
+  const [breachDetectedAt, setBreachDetectedAt] = useState<string | null>(null)
+  const [breachInsight, setBreachInsight] = useState<string | null>(null)
+  const [breachInsightLoading, setBreachInsightLoading] = useState(false)
+  const prevPnlBreachedRef = useRef(false)
+
+  const lastFiveAuditEvents = useMemo(() => {
+    const all = Object.values(auditByOrderId).flat()
+    all.sort((a, b) => {
+      const seqCmp = Number(b.sequence) - Number(a.sequence)
+      if (seqCmp !== 0) return seqCmp
+      return b.emittedAt.localeCompare(a.emittedAt)
+    })
+    return all.slice(0, 5).map((e) => ({
+      emittedAt: e.emittedAt,
+      summary: e.summary,
+    }))
+  }, [auditByOrderId])
+
+  const topFivePositionsByAbsPnl = useMemo(() => {
+    return [...orders]
+      .sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl))
+      .slice(0, 5)
+      .map((o) => ({
+        symbol: o.symbol,
+        side: o.side,
+        quantity: o.quantity,
+        pnl: o.pnl,
+      }))
+  }, [orders])
+
+  useEffect(() => {
+    const transition = evaluateBreachTransition(aggregatePnl, BREACH_PNL_THRESHOLD, prevPnlBreachedRef.current)
+    if (transition.justCrossedDown) {
+      setBreachAcknowledged(false)
+      setBreachDetectedAt(new Date().toISOString())
+      void message.warning(`P&L breach: ${STATS_MONEY.format(transition.aggregatePnl)} <= ${STATS_MONEY.format(BREACH_PNL_THRESHOLD)}`)
+      setBreachInsightLoading(true)
+      void fetchBreachInsight({
+        currentPnl: transition.aggregatePnl,
+        threshold: BREACH_PNL_THRESHOLD,
+        topPositions: topFivePositionsByAbsPnl,
+        lastAuditEvents: lastFiveAuditEvents,
+      })
+        .then((insight) => {
+          setBreachInsight(insight)
+        })
+        .catch((e) => {
+          const msg = e instanceof Error ? e.message : 'Failed to generate breach insight'
+          setBreachInsight(`Insight unavailable: ${msg}`)
+        })
+        .finally(() => {
+          setBreachInsightLoading(false)
+        })
+    }
+    if (!transition.breached) {
+      setBreachAcknowledged(false)
+      setBreachDetectedAt(null)
+      setBreachInsight(null)
+      setBreachInsightLoading(false)
+    }
+    prevPnlBreachedRef.current = transition.breached
+    setPnlBreached((prev) => (prev === transition.breached ? prev : transition.breached))
+  }, [aggregatePnl, lastFiveAuditEvents, topFivePositionsByAbsPnl])
+
+  const handleSimulateBreach = useCallback(() => {
+    const event = buildSimulatedBreachEvent(orders, lastStreamSequence == null ? null : Number(lastStreamSequence))
+    if (!event) {
+      void message.warning('No orders available for breach simulation')
+      return
+    }
+    useBlotterStore.getState().ingestEvent(event)
+    void message.success('Simulated breach event injected')
+  }, [lastStreamSequence, orders])
+
+  const handleNormalizePnl = useCallback(() => {
+    const event = buildSimulatedRecoveryEvent(orders, lastStreamSequence == null ? null : Number(lastStreamSequence))
+    if (!event) {
+      void message.warning('No orders available for normalization simulation')
+      return
+    }
+    useBlotterStore.getState().ingestEvent(event)
+    void message.success('Simulated normalization event injected')
+  }, [lastStreamSequence, orders])
 
   const grossWorkingNotional = useMemo(
     () =>
@@ -309,6 +411,45 @@ function PrimeBlotterApp() {
             }
           />
         ) : null}
+        {pnlBreached && !breachAcknowledged ? (
+          <Alert
+            type="warning"
+            showIcon
+            className="app-bootstrap-alert app-bootstrap-alert--single-line app-breach-alert-banner"
+            action={
+              <Button
+                size="small"
+                className="app-breach-alert__ack-btn"
+                onClick={() => setBreachAcknowledged(true)}
+              >
+                Acknowledge
+              </Button>
+            }
+            message={
+              <div className="app-breach-alert">
+                <span className="app-bootstrap-alert__one-line app-breach-alert__title-row">
+                  <span
+                    className="app-breach-alert__title"
+                    title={`P&L breach: ${STATS_MONEY.format(aggregatePnl)} is below threshold ${STATS_MONEY.format(BREACH_PNL_THRESHOLD)}`}
+                  >
+                    {`P&L breach: ${STATS_MONEY.format(aggregatePnl)} <= ${STATS_MONEY.format(BREACH_PNL_THRESHOLD)}`}
+                  </span>
+                  {breachDetectedAt ? (
+                    <span className="app-breach-alert__timestamp">| Detected {formatBreachTime(breachDetectedAt)}</span>
+                  ) : null}
+                </span>
+                {breachInsightLoading ? (
+                  <span className="app-breach-alert__insight app-breach-alert__insight--loading">
+                    <Spin size="small" />
+                    <span>Analyzing positions and recent trade events...</span>
+                  </span>
+                ) : (
+                  <span className="app-breach-alert__insight">{breachInsight ?? 'No insight generated yet.'}</span>
+                )}
+              </div>
+            }
+          />
+        ) : null}
         <Card className="app-card app-card--stats" bordered={false}>
           <div className="stats-strip-layout">
             <div className="stats-strip-cluster">
@@ -318,16 +459,23 @@ function PrimeBlotterApp() {
                     <div className="stats-item-label">P&amp;L</div>
                     <div
                       className={
-                        aggregatePnl > 0
-                          ? 'stats-item-value stats-item-value--pnl-up'
-                          : aggregatePnl < 0
-                            ? 'stats-item-value stats-item-value--pnl-down'
-                            : 'stats-item-value stats-item-value--pnl-flat'
+                        `stats-item-value ${
+                          aggregatePnl > 0
+                            ? 'stats-item-value--pnl-up'
+                            : aggregatePnl < 0
+                              ? 'stats-item-value--pnl-down'
+                              : 'stats-item-value--pnl-flat'
+                        }${pnlBreached ? ' stats-item-value--pnl-breach-pulse' : ''}`
                       }
                     >
                       {STATS_MONEY.format(aggregatePnl)}
                     </div>
                     <div className="stats-item-hint">Aggregate across visible rows (mock)</div>
+                    {pnlBreached ? (
+                      <Tag bordered className="stats-pnl-breach-chip">
+                        Breach threshold hit ({STATS_MONEY.format(BREACH_PNL_THRESHOLD)})
+                      </Tag>
+                    ) : null}
                   </div>
                   <div className="stats-metric-card">
                     <div className="stats-item-label">Risk exposure</div>
@@ -376,6 +524,24 @@ function PrimeBlotterApp() {
                         title={STATS_AI_ACTIONS_ENABLED ? 'Generate end-of-day report' : 'EOD report (temporarily disabled)'}
                       >
                         EOD report
+                      </Button>
+                      <Button
+                        type="default"
+                        className="ai-tile__action ai-tile__action--simulate-breach"
+                        onClick={() => void handleSimulateBreach()}
+                        disabled={orders.length === 0}
+                        title="Inject a deterministic losing AAPL sell fill event"
+                      >
+                        Simulate breach
+                      </Button>
+                      <Button
+                        type="default"
+                        className="ai-tile__action ai-tile__action--normalize-pnl"
+                        onClick={() => void handleNormalizePnl()}
+                        disabled={orders.length === 0}
+                        title="Inject a deterministic favorable AAPL sell fill event to recover P&L"
+                      >
+                        Normalize P&amp;L
                       </Button>
                     </div>
                   </div>
