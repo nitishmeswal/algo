@@ -1,10 +1,4 @@
-import {
-  CloseOutlined,
-  DownOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
-  UserOutlined,
-} from '@ant-design/icons'
+import { CloseOutlined, DownOutlined, MenuFoldOutlined, MenuUnfoldOutlined, UserOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Key } from 'react'
 import { Alert, Avatar, Button, Card, Dropdown, Input, Layout, Menu, Space, Spin, Tag, Typography, message } from 'antd'
@@ -28,18 +22,19 @@ import AuditTrailTable, { type AuditTrailTableProps } from './features/table/Aud
 import BlotterTable from './features/table/BlotterTable'
 import { Sparkles } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { AiTradeBookingModal } from './features/trade-booking/AiTradeBookingModal'
 import './App.css'
 
 const ORDER_FORM_OPEN_KEY = 'prime-blotter-order-form-open'
 
-/** Set to `true` to re-enable Summarize + EOD report in the stats strip. */
-const STATS_AI_ACTIONS_ENABLED = false
+/** Re-enable with Summarize + EOD buttons when uncommented in the AI actions strip below. */
+// const STATS_AI_ACTIONS_ENABLED = false
 
 const BLOTTER_WS_URL = (import.meta.env.VITE_BLOTTER_WS_URL as string | undefined)?.trim() ?? ''
 const USE_BLOTTER_WEBSOCKET = BLOTTER_WS_URL.length > 0
 const BREACH_PNL_THRESHOLD = -80_000
 
-const DUMMY_DISPLAY_NAME = 'Chris Taylor'
+const DUMMY_DISPLAY_NAME = 'Rachel Wagner-Kaiser'
 
 const TOP_NAV_ITEMS = [
   { key: 'blotter', label: 'Blotter' },
@@ -85,6 +80,7 @@ function PrimeBlotterApp() {
   const [auditFocusKey, setAuditFocusKey] = useState<Key | null>(null)
   const [selectionModalOpen, setSelectionModalOpen] = useState(false)
   const [eodModalOpen, setEodModalOpen] = useState(false)
+  const [aiTradeBookingModalOpen, setAiTradeBookingModalOpen] = useState(false)
   /** Draft text for the AI filter box; applied only after **Apply** (OpenAI + Zod on server). */
   const [nlpFilterDraft, setNlpFilterDraft] = useState('')
   /** Last successfully applied structured filter; `null` means show full book for this path. */
@@ -500,10 +496,20 @@ function PrimeBlotterApp() {
                 <div className="stats-ai-strip__row">
                   <div className="stats-ai-strip__actions-col">
                     <div className="stats-nlp-label-row">
-                      <Sparkles className="stats-nlp-label__sparkle" size={14} aria-hidden strokeWidth={2} />
                       <span className="stats-item-label stats-nlp-label__text">AI actions</span>
                     </div>
                     <div className="ai-tile__buttons">
+                      <Button
+                        type="text"
+                        className="ai-tile__action ai-tile__action--booking-agent"
+                        icon={<Sparkles className="ai-tile__booking-agent-sparkle" size={18} aria-hidden strokeWidth={2} />}
+                        onClick={() => setAiTradeBookingModalOpen(true)}
+                        title="Open AI Trade Booking Agent (natural language)"
+                      >
+                        AI Agent
+                      </Button>
+                      {/* Summarize + EOD report — hidden from AI actions strip; row context “Summarize” still opens modal if needed */}
+                      {/*
                       <Button
                         type={selectedRowKeys.length > 0 ? 'primary' : 'default'}
                         ghost={selectedRowKeys.length === 0}
@@ -525,6 +531,7 @@ function PrimeBlotterApp() {
                       >
                         EOD report
                       </Button>
+                      */}
                       <Button
                         type="default"
                         className="ai-tile__action ai-tile__action--simulate-breach"
@@ -547,7 +554,6 @@ function PrimeBlotterApp() {
                   </div>
                   <div className="stats-nlp-field stats-nlp-field--in-strip">
                     <div className="stats-nlp-label-row">
-                      <Sparkles className="stats-nlp-label__sparkle" size={14} aria-hidden strokeWidth={2} />
                       <label className="stats-item-label stats-nlp-label__text" htmlFor="stats-nlp-input">
                         AI filter
                       </label>
@@ -641,6 +647,11 @@ function PrimeBlotterApp() {
           model={selectionModel}
         />
         <EodReportModal open={eodModalOpen} onClose={() => setEodModalOpen(false)} sections={eodSections} />
+
+        <AiTradeBookingModal
+          open={aiTradeBookingModalOpen}
+          onClose={() => setAiTradeBookingModalOpen(false)}
+        />
 
         <AmendOrderModal
           open={amendModalOpen}

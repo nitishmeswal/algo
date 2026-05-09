@@ -49,5 +49,7 @@ server.listen(PORT, () => {
   console.log(`  GET  http://localhost:${PORT}/orders/:id/audit`)
   console.log(`  POST http://localhost:${PORT}/nlp/parse-order-filter`)
   console.log(`  POST http://localhost:${PORT}/nlp/breach-insight`)
+  console.log(`  POST http://localhost:${PORT}/nlp/trade-booking`)
+  console.log(`  POST http://localhost:${PORT}/nlp/trade-booking/stream`)
   console.log(`  WS   ws://localhost:${PORT}${WS_PATH}`)
 })

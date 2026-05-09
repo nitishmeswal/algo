@@ -189,3 +189,21 @@ export async function submitOrder(payload: OrderEntryPayload): Promise<void> {
   }
   useBlotterStore.getState().ingestEvent(event)
 }
+
+/** Merge a booked agent order DTO into the blotter store (same path as HTTP POST /orders). */
+export function ingestOrderFromBookedAgent(orderPayload: unknown): void {
+  if (!isRecord(orderPayload)) {
+    throw new Error('Invalid order payload')
+  }
+  const order = parseOrderDto(orderPayload as OrderDto)
+  if (!order) throw new Error('Invalid order payload')
+
+  const event: OrderCreatedEvent = {
+    type: 'order_created',
+    order,
+    sequence: nextSequence(),
+    emittedAt: order.updatedAt,
+    source: 'live',
+  }
+  useBlotterStore.getState().ingestEvent(event)
+}
