@@ -22,6 +22,7 @@ import AuditTrailTable, { type AuditTrailTableProps } from './features/table/Aud
 import BlotterTable from './features/table/BlotterTable'
 import { Sparkles } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { DeskAuditHub } from './features/audit/DeskAuditHub'
 import { AiTradeBookingModal } from './features/trade-booking/AiTradeBookingModal'
 import './App.css'
 
@@ -40,6 +41,7 @@ const TOP_NAV_ITEMS = [
   { key: 'blotter', label: 'Blotter' },
   { key: 'positions', label: 'Positions' },
   { key: 'analytics', label: 'Analytics' },
+  { key: 'audit', label: 'Audit' },
 ] as const
 
 const STATS_MONEY = new Intl.NumberFormat('en-US', {
@@ -388,8 +390,10 @@ function PrimeBlotterApp() {
         </div>
       </Layout.Header>
 
-      <Layout.Content className="app-content">
-        {USE_BLOTTER_WEBSOCKET && liveBootstrapStatus === 'loading' ? (
+      <Layout.Content className={`app-content${topNavKey === 'audit' ? ' app-content--audit-tab' : ''}`}>
+        {topNavKey === 'blotter' ? (
+          <>
+            {USE_BLOTTER_WEBSOCKET && liveBootstrapStatus === 'loading' ? (
           <Alert type="info" showIcon message="Loading orders…" className="app-bootstrap-alert" />
         ) : null}
         {ordersLoadErrorText && !ordersLoadErrorDismissed ? (
@@ -641,33 +645,6 @@ function PrimeBlotterApp() {
           </div>
         </Card>
 
-        <SelectionSummaryModal
-          open={selectionModalOpen}
-          onClose={() => setSelectionModalOpen(false)}
-          model={selectionModel}
-        />
-        <EodReportModal open={eodModalOpen} onClose={() => setEodModalOpen(false)} sections={eodSections} />
-
-        <AiTradeBookingModal
-          open={aiTradeBookingModalOpen}
-          onClose={() => setAiTradeBookingModalOpen(false)}
-        />
-
-        <AmendOrderModal
-          open={amendModalOpen}
-          order={amendTargetOrder}
-          onClose={() => setAmendModalOpen(false)}
-          onSubmit={async (values) => {
-            if (!amendTargetOrder) return
-            try {
-              await amendOrder(amendTargetOrder.id, values)
-              void message.success('Amend sent')
-            } catch {
-              void message.error('Amend failed')
-            }
-          }}
-        />
-
         <div
           className={
             orderFormOpen ? 'order-workspace' : 'order-workspace order-workspace--form-collapsed'
@@ -799,6 +776,46 @@ function PrimeBlotterApp() {
             <AuditTrailTable {...auditTrailProps} />
           </Card>
         </section>
+          </>
+        ) : topNavKey === 'audit' ? (
+          <DeskAuditHub />
+        ) : (
+          <Card className="app-card app-tab-route-placeholder" bordered={false}>
+            <Typography.Title level={4}>
+              {topNavKey === 'positions' ? 'Positions' : 'Analytics'}
+            </Typography.Title>
+            <Typography.Paragraph type="secondary">
+              This view is not wired yet. Use Blotter for orders or Audit for the unified log (mock).
+            </Typography.Paragraph>
+          </Card>
+        )}
+
+        <SelectionSummaryModal
+          open={selectionModalOpen}
+          onClose={() => setSelectionModalOpen(false)}
+          model={selectionModel}
+        />
+        <EodReportModal open={eodModalOpen} onClose={() => setEodModalOpen(false)} sections={eodSections} />
+
+        <AiTradeBookingModal
+          open={aiTradeBookingModalOpen}
+          onClose={() => setAiTradeBookingModalOpen(false)}
+        />
+
+        <AmendOrderModal
+          open={amendModalOpen}
+          order={amendTargetOrder}
+          onClose={() => setAmendModalOpen(false)}
+          onSubmit={async (values) => {
+            if (!amendTargetOrder) return
+            try {
+              await amendOrder(amendTargetOrder.id, values)
+              void message.success('Amend sent')
+            } catch {
+              void message.error('Amend failed')
+            }
+          }}
+        />
       </Layout.Content>
     </Layout>
   )

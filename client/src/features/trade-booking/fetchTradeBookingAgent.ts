@@ -151,3 +151,69 @@ export async function fetchTradeBookingAgent(body: TradeBookingRequest): Promise
   }
   return parsed.data
 }
+
+export type TradeBookingRunHistoryItem = {
+  id: string
+  at: string
+  sessionId: string | null
+  orderId: string | null
+  outcome: 'booked' | 'escalated' | 'error'
+  summary: string
+  detail: string
+}
+
+export type TradeBookingRunHistoryResponse = {
+  runs: TradeBookingRunHistoryItem[]
+}
+
+function parseTradeBookingRunHistoryItem(raw: unknown): TradeBookingRunHistoryItem | null {
+  if (!isRecord(raw)) return null
+  const id = raw.id
+  const at = raw.at
+  const outcome = raw.outcome
+  const summary = raw.summary
+  const detail = raw.detail
+  if (typeof id !== 'string' || typeof at !== 'string' || typeof summary !== 'string' || typeof detail !== 'string') {
+    return null
+  }
+  if (outcome !== 'booked' && outcome !== 'escalated' && outcome !== 'error') return null
+  const sessionId = raw.sessionId
+  const orderId = raw.orderId
+  return {
+    id,
+    at,
+    sessionId: typeof sessionId === 'string' ? sessionId : null,
+    orderId: typeof orderId === 'string' ? orderId : null,
+    outcome,
+    summary,
+    detail,
+  }
+}
+
+/** Recent terminal trade-booking agent runs from `agent_audit_log` (`GET /nlp/trade-booking/history`). */
+export async function fetchTradeBookingRunHistory(): Promise<TradeBookingRunHistoryResponse> {
+  const res = await fetch('/nlp/trade-booking/history')
+  let json: unknown = null
+  try {
+    json = await res.json()
+  } catch {
+    json = null
+  }
+  if (!res.ok) {
+    const msg =
+      isRecord(json) && typeof json.message === 'string' && json.message.trim() !== ''
+        ? json.message
+        : `HTTP ${res.status}`
+    throw new Error(msg)
+  }
+  if (!isRecord(json) || !Array.isArray(json.runs)) {
+    throw new Error('Invalid trade-booking history response')
+  }
+  const runs: TradeBookingRunHistoryItem[] = []
+  for (const row of json.runs) {
+    const r = parseTradeBookingRunHistoryItem(row)
+    if (!r) throw new Error('Invalid trade-booking history row')
+    runs.push(r)
+  }
+  return { runs }
+}

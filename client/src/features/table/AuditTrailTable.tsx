@@ -1,6 +1,6 @@
 import { Alert, Spin, Table, Tag, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import type { OrderAuditEventDto } from '../blotter/api/orderAuditApi'
+import type { AgentAuditEventDto, OrderAuditEventDto } from '../blotter/api/orderAuditApi'
 import { useOrderAudit } from '../blotter/audit/useOrderAudit'
 import type { Order } from '../blotter/types'
 
@@ -47,8 +47,81 @@ function eventTagColor(eventType: string): string | undefined {
   }
 }
 
-function buildAuditTree(order: Order | undefined, orderId: string, events: OrderAuditEventDto[]): AuditTrailRow[] {
-  const visible = events.filter((e) => e.eventType !== 'heartbeat')
+function agentEventTagColor(eventType: string): string | undefined {
+  switch (eventType) {
+    case 'agent_tool_call':
+      return 'processing'
+    case 'agent_decision':
+      return 'success'
+    case 'nlp_filter':
+      return 'geekblue'
+    case 'breach_detected':
+      return 'error'
+    case 'breach_insight':
+      return 'warning'
+    default:
+      return 'purple'
+  }
+}
+
+function agentAuditSummary(a: AgentAuditEventDto): string {
+  if (a.toolName) {
+    const st = a.toolStatus ? ` · ${a.toolStatus}` : ''
+    let detail = ''
+    if (typeof a.toolOutput === 'object' && a.toolOutput !== null && 'message' in a.toolOutput) {
+      const m = (a.toolOutput as { message?: unknown }).message
+      if (typeof m === 'string' && m.trim() !== '') detail = m
+    }
+    const head = `${a.toolName}${st}`
+    return detail ? `${head} — ${detail}` : head
+  }
+  if (a.decision) {
+    return [a.decision, a.decisionReason].filter(Boolean).join(' — ')
+  }
+  if (a.llmInsight) return a.llmInsight.length > 200 ? `${a.llmInsight.slice(0, 200)}…` : a.llmInsight
+  if (a.inputText) return a.inputText.length > 160 ? `${a.inputText.slice(0, 160)}…` : a.inputText
+  return humanizeEventType(a.eventType)
+}
+
+type MergedAuditChild = {
+  key: string
+  at: string
+  time: string
+  event: string
+  summary: string
+  source: string
+  tagColor?: string
+}
+
+function buildAuditTree(
+  order: Order | undefined,
+  orderId: string,
+  events: OrderAuditEventDto[],
+  agentEvents: AgentAuditEventDto[],
+): AuditTrailRow[] {
+  const visibleOrder = events.filter((e) => e.eventType !== 'heartbeat')
+  const merged: MergedAuditChild[] = [
+    ...visibleOrder.map((e) => ({
+      key: `o-${e.id}`,
+      at: e.emittedAt,
+      time: formatAuditTime(e.emittedAt),
+      event: humanizeEventType(e.eventType),
+      summary: e.summary,
+      source: e.source.toUpperCase(),
+      tagColor: eventTagColor(e.eventType),
+    })),
+    ...agentEvents.map((a) => ({
+      key: `a-${a.id}`,
+      at: a.createdAt,
+      time: formatAuditTime(a.createdAt),
+      event: humanizeEventType(a.eventType),
+      summary: agentAuditSummary(a),
+      source: 'AGENT',
+      tagColor: agentEventTagColor(a.eventType),
+    })),
+  ]
+  merged.sort((x, y) => new Date(x.at).getTime() - new Date(y.at).getTime())
+
   const rootSummary = order
     ? `${order.symbol} · ${order.side} · ${order.quantity}${order.limitPrice != null ? ` @ ${order.limitPrice}` : ''} · ${order.status}`
     : orderId
@@ -60,13 +133,13 @@ function buildAuditTree(order: Order | undefined, orderId: string, events: Order
     summary: rootSummary,
     source: 'BLOTTER',
     tagColor: 'blue',
-    children: visible.map((e) => ({
-      key: e.id,
-      time: formatAuditTime(e.emittedAt),
-      event: humanizeEventType(e.eventType),
-      summary: e.summary,
-      source: e.source.toUpperCase(),
-      tagColor: eventTagColor(e.eventType),
+    children: merged.map(({ key, time, event, summary, source, tagColor }) => ({
+      key,
+      time,
+      event,
+      summary,
+      source,
+      tagColor,
     })),
   }
   return [root]
@@ -163,14 +236,20 @@ export default function AuditTrailTable(props: AuditTrailTableProps) {
   }
 
   const events = data?.events ?? []
-  const shownCount = events.filter((e) => e.eventType !== 'heartbeat').length
-  const tree = data != null ? buildAuditTree(props.order, props.orderId, data.events) : []
+  const agentEvents = data?.agentEvents ?? []
+  const visibleOrder = events.filter((e) => e.eventType !== 'heartbeat')
+  const shownCount = visibleOrder.length + agentEvents.length
+  const tree =
+    data != null ? buildAuditTree(props.order, props.orderId, data.events, data.agentEvents ?? []) : []
 
   return (
     <div className="audit-trail-tree-wrap">
       <Typography.Paragraph type="secondary" className="audit-trail-focus-hint" ellipsis>
         Selected: {headline} — {shownCount} event{shownCount === 1 ? '' : 's'} shown
-        {events.length !== shownCount ? ` (${events.length} in response, heartbeats hidden)` : ''}.
+        {events.length !== visibleOrder.length
+          ? ` (${events.length} order rows in response, heartbeats hidden)`
+          : ''}
+        {agentEvents.length > 0 ? ` · ${agentEvents.length} agent` : ''}.
       </Typography.Paragraph>
       <Table<AuditTrailRow>
         className="audit-trail-table"

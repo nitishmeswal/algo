@@ -1365,6 +1365,34 @@ a.page-header-brand--link:hover .page-header-title {
   box-sizing: border-box;
 }
 
+/* Advanced — Order type & TIF (Select): same rgba fill as Account / Symbol `.ant-input` */
+.app-card.app-card--form .order-entry-form .order-entry-form__panel--advanced .ant-select:not(.ant-select-customize) .ant-select-selector {
+  --ant-select-background-color: rgba(0, 0, 0, 0.28) !important;
+  --ant-color-bg-container: rgba(0, 0, 0, 0.28) !important;
+  --ant-color-fill-tertiary: rgba(0, 0, 0, 0.28) !important;
+  background: rgba(0, 0, 0, 0.28) !important;
+  background-color: rgba(0, 0, 0, 0.28) !important;
+  background-image: none !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+.app-card.app-card--form .order-entry-form .order-entry-form__panel--advanced .ant-select:not(.ant-select-customize):not(.ant-select-disabled):hover .ant-select-selector {
+  --ant-select-background-color: rgba(0, 0, 0, 0.28) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+}
+
+.app-card.app-card--form .order-entry-form .order-entry-form__panel--advanced .ant-select-focused.ant-select:not(.ant-select-customize):not(.ant-select-disabled) .ant-select-selector,
+.app-card.app-card--form .order-entry-form .order-entry-form__panel--advanced .ant-select:not(.ant-select-customize).ant-select-open .ant-select-selector {
+  --ant-select-background-color: rgba(0, 0, 0, 0.28) !important;
+  border-color: rgba(34, 211, 238, 0.55) !important;
+  box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.14) !important;
+}
+
+.app-card.app-card--form .order-entry-form .order-entry-form__panel--advanced .ant-select-single .ant-select-selection-placeholder {
+  color: rgba(255, 255, 255, 0.32) !important;
+}
+
 .order-entry-form__section--advanced-block {
   margin-bottom: 0;
 }
@@ -1401,7 +1429,7 @@ a.page-header-brand--link:hover .page-header-title {
 }
 
 .order-entry-form .ant-select-single:not(.ant-select-customize-input) .ant-select-selector,
-.order-entry-form .ant-select-auto-complete.ant-select .ant-select-selector {
+.order-entry-form .ant-select-auto-complete.ant-select:not(.ant-select-customize) .ant-select-selector {
   height: 32px !important;
   min-height: 32px !important;
   padding-inline: 10px !important;
@@ -1552,9 +1580,16 @@ a.page-header-brand--link:hover .page-header-title {
   box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.14) !important;
 }
 
+.app-card.app-card--form .order-entry-form .ant-select .ant-select-selector,
 .app-card.app-card--form .order-entry-form .ant-select-single .ant-select-selector,
-.app-card.app-card--form .order-entry-form .ant-select-auto-complete .ant-select-selector {
+.app-card.app-card--form .order-entry-form .ant-select-auto-complete:not(.ant-select-customize) .ant-select-selector {
+  /* AD v6 Select outlined: bg is `var(--ant-select-background-color)`, not global container token */
+  --ant-select-background-color: rgba(0, 0, 0, 0.28) !important;
+  --ant-color-bg-container: rgba(0, 0, 0, 0.28) !important;
+  --ant-color-fill-tertiary: rgba(0, 0, 0, 0.28) !important;
   background: rgba(0, 0, 0, 0.28) !important;
+  background-color: rgba(0, 0, 0, 0.28) !important;
+  background-image: none !important;
   border-color: rgba(255, 255, 255, 0.12) !important;
   color: rgba(255, 255, 255, 0.92) !important;
 }
@@ -1568,11 +1603,13 @@ a.page-header-brand--link:hover .page-header-title {
 }
 
 .app-card.app-card--form .order-entry-form .ant-select:not(.ant-select-disabled):hover .ant-select-selector {
+  --ant-select-background-color: rgba(0, 0, 0, 0.28) !important;
   border-color: rgba(255, 255, 255, 0.22) !important;
 }
 
 .app-card.app-card--form .order-entry-form .ant-select-focused.ant-select:not(.ant-select-disabled) .ant-select-selector,
 .app-card.app-card--form .order-entry-form .ant-select.ant-select-open .ant-select-selector {
+  --ant-select-background-color: rgba(0, 0, 0, 0.28) !important;
   border-color: rgba(34, 211, 238, 0.55) !important;
   box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.14) !important;
 }
@@ -1605,6 +1642,102 @@ a.page-header-brand--link:hover .page-header-title {
   color: rgba(255, 255, 255, 0.88);
 }
 
+/*
+ * Symbol, Side, Order type, TIF — match Account/Counterparty Inputs (32px, same fill).
+ * Ant Design 6 outlined Select paints via CSS variables; mirror the Input rule (`background` + tokens).
+ */
+.app-card.app-card--form .order-entry-form .order-entry-ticket-select.ant-select.ant-select-outlined {
+  width: 100%;
+  min-width: 0;
+  height: 32px !important;
+  min-height: 32px !important;
+}
+
+.app-card.app-card--form .order-entry-form .order-entry-ticket-select.ant-select.ant-select-sm {
+  height: 32px !important;
+  min-height: 32px !important;
+}
+
+.app-card.app-card--form .order-entry-form .order-entry-ticket-select.ant-select.ant-select-outlined .ant-select-selector {
+  /* Same as `.ant-input` in this card: rgba(0,0,0,0.28) — override component tokens v6 injects */
+  --ant-select-background-color: rgba(0, 0, 0, 0.28) !important;
+  --ant-color-bg-container: rgba(0, 0, 0, 0.28) !important;
+  --ant-color-fill-tertiary: rgba(0, 0, 0, 0.28) !important;
+  --ant-color-fill-secondary: rgba(0, 0, 0, 0.28) !important;
+  --ant-color-fill-content: rgba(0, 0, 0, 0.28) !important;
+  background: rgba(0, 0, 0, 0.28) !important;
+  background-color: rgba(0, 0, 0, 0.28) !important;
+  background-image: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 6px !important;
+  min-height: 32px !important;
+  height: 32px !important;
+  max-height: 32px !important;
+  padding-block: 0 !important;
+  padding-inline: 10px !important;
+  font-size: 13px !important;
+  box-shadow: none !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.app-card.app-card--form .order-entry-form .order-entry-ticket-select.ant-select.ant-select-outlined .ant-select-selection-wrap {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.app-card.app-card--form .order-entry-form .order-entry-ticket-select.ant-select.ant-select-outlined .ant-select-selection-item {
+  color: rgba(255, 255, 255, 0.92) !important;
+  line-height: 20px !important;
+  display: flex;
+  align-items: center;
+}
+
+.app-card.app-card--form .order-entry-form .order-entry-ticket-select.ant-select.ant-select-outlined .ant-select-selection-placeholder {
+  color: rgba(255, 255, 255, 0.32) !important;
+  line-height: 20px !important;
+}
+
+.app-card.app-card--form .order-entry-form .order-entry-ticket-select.ant-select.ant-select-outlined .ant-select-selection-search {
+  display: flex;
+  align-items: center;
+}
+
+.app-card.app-card--form .order-entry-form .order-entry-ticket-select.ant-select.ant-select-outlined .ant-select-selection-search-input {
+  color: rgba(255, 255, 255, 0.92) !important;
+  height: 20px !important;
+  line-height: 20px !important;
+  padding: 0 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+.app-card.app-card--form .order-entry-form .order-entry-ticket-select.ant-select.ant-select-outlined:not(.ant-select-disabled):hover .ant-select-selector {
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  --ant-select-background-color: rgba(0, 0, 0, 0.28) !important;
+  --ant-color-bg-container: rgba(0, 0, 0, 0.28) !important;
+  background: rgba(0, 0, 0, 0.28) !important;
+  background-color: rgba(0, 0, 0, 0.28) !important;
+}
+
+.app-card.app-card--form .order-entry-form .order-entry-ticket-select.ant-select-outlined.ant-select-focused:not(.ant-select-disabled) .ant-select-selector,
+.app-card.app-card--form .order-entry-form .order-entry-ticket-select.ant-select-outlined.ant-select-open .ant-select-selector {
+  border-color: rgba(34, 211, 238, 0.55) !important;
+  box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.14) !important;
+  --ant-select-background-color: rgba(0, 0, 0, 0.28) !important;
+  --ant-color-bg-container: rgba(0, 0, 0, 0.28) !important;
+  background: rgba(0, 0, 0, 0.28) !important;
+  background-color: rgba(0, 0, 0, 0.28) !important;
+}
+
+.app-card.app-card--form .order-entry-form .order-entry-ticket-select .ant-select-arrow,
+.app-card.app-card--form .order-entry-form .order-entry-ticket-select .ant-select-clear {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+
 .order-entry-form .order-entry-input--mono,
 .order-entry-form .order-entry-input--symbol {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
@@ -1612,7 +1745,38 @@ a.page-header-brand--link:hover .page-header-title {
   letter-spacing: -0.02em;
 }
 
-.order-entry-symbol-autocomplete.ant-select.ant-select-auto-complete .ant-select-selector input {
+/* Symbol: AutoComplete wraps the same Input as Account/Counterparty — strip Select chrome so only .ant-input shows */
+.app-card.app-card--form .order-entry-form .order-entry-symbol-autocomplete.ant-select.ant-select-customize {
+  background: transparent !important;
+}
+
+.app-card.app-card--form .order-entry-form .order-entry-symbol-autocomplete.ant-select.ant-select-customize .ant-select-selector {
+  background: transparent !important;
+  background-color: transparent !important;
+  --ant-select-background-color: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  min-height: 32px !important;
+  height: auto !important;
+}
+
+.app-card.app-card--form .order-entry-form .order-entry-symbol-autocomplete.ant-select.ant-select-customize .ant-input {
+  width: 100%;
+}
+
+.app-card.app-card--form .order-entry-form .order-entry-symbol-autocomplete.ant-select.ant-select-customize:not(.ant-select-disabled):hover .ant-select-selector,
+.app-card.app-card--form .order-entry-form .order-entry-symbol-autocomplete.ant-select.ant-select-customize.ant-select-focused:not(.ant-select-disabled) .ant-select-selector,
+.app-card.app-card--form .order-entry-form .order-entry-symbol-autocomplete.ant-select.ant-select-customize.ant-select-open .ant-select-selector {
+  border: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  --ant-select-background-color: transparent !important;
+}
+
+.order-entry-symbol-autocomplete.ant-select.ant-select-auto-complete .ant-select-selector input,
+.order-entry-symbol-autocomplete.ant-select.ant-select-auto-complete .ant-select-selector .ant-input {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
@@ -2625,6 +2789,26 @@ a.page-header-brand--link:hover .page-header-title {
   color: rgba(134, 239, 172, 0.98) !important;
 }
 
+/* Before any run: step 0 is not "in progress" — mute icon + title (no indigo ring / bright text). */
+.ai-trade-agent__steps--pristine.ant-steps .ant-steps-item-wait .ant-steps-item-icon {
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  background-color: rgba(255, 255, 255, 0.04) !important;
+  color: rgba(255, 255, 255, 0.38) !important;
+}
+
+.ai-trade-agent__steps--pristine.ant-steps .ant-steps-item-wait .ant-steps-item-icon > .ant-steps-icon {
+  color: rgba(255, 255, 255, 0.38) !important;
+}
+
+.ai-trade-agent__steps--pristine.ant-steps .ant-steps-item-wait .ant-steps-item-title {
+  color: rgba(255, 255, 255, 0.52) !important;
+  font-weight: 500 !important;
+}
+
+.ai-trade-agent__steps--pristine.ant-steps .ant-steps-item-wait .ant-steps-item-description {
+  color: rgba(255, 255, 255, 0.36) !important;
+}
+
 .ai-trade-agent__run-history-lead {
   margin: 0 0 10px !important;
   font-size: 12px !important;
@@ -2828,4 +3012,362 @@ a.page-header-brand--link:hover .page-header-title {
   .ai-trade-booking-drawer .ant-drawer-resizable-dragger {
     transition: none;
   }
+}
+
+/* —— Desk Audit tab (unified log mock) —— */
+.app-content.app-content--audit-tab {
+  flex: 1;
+  min-height: 0;
+}
+
+.desk-audit-hub {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+  flex: 1;
+  min-height: 0;
+}
+
+.desk-audit-hub__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 20px;
+  width: 100%;
+}
+
+.desk-audit-hub__toolbar-text {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.desk-audit-hub__toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.desk-audit-hub__actions-sep {
+  width: 1px;
+  flex-shrink: 0;
+  align-self: stretch;
+  margin: 0 18px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.desk-audit-hub__export-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.desk-audit-hub__export-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.desk-audit-hub__export-icon {
+  font-size: 14px;
+  color: rgba(125, 211, 252, 0.95);
+  flex-shrink: 0;
+}
+
+.desk-audit-hub__export-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.95) !important;
+}
+
+.desk-audit-hub__export-hint {
+  font-size: 11px !important;
+  line-height: 1.35 !important;
+  margin: -2px 0 0 !important;
+  max-width: 220px;
+  text-align: left;
+  color: rgba(255, 255, 255, 0.42) !important;
+}
+
+.desk-audit-hub__export-btn.ant-btn {
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  background: rgba(0, 0, 0, 0.35) !important;
+  color: rgba(255, 255, 255, 0.88) !important;
+}
+
+.desk-audit-hub__export-btn.ant-btn:not(:disabled):hover {
+  border-color: rgba(34, 211, 238, 0.35) !important;
+  color: rgba(167, 243, 208, 0.98) !important;
+}
+
+.desk-audit-hub__export-btn.ant-btn:disabled {
+  opacity: 0.45;
+}
+
+.desk-audit-hub__title {
+  margin: 0 0 4px !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+.desk-audit-hub__subtitle {
+  margin: 0 !important;
+  max-width: 720px;
+}
+
+.desk-audit-hub__filter-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.desk-audit-hub__filter-label-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.desk-audit-hub__filter-icon {
+  font-size: 14px;
+}
+
+.desk-audit-hub__filter-icon--stream {
+  color: rgba(94, 234, 212, 0.95);
+}
+
+.desk-audit-hub__filter-icon--view {
+  color: rgba(196, 181, 253, 0.95);
+}
+
+.desk-audit-hub__filter-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.95) !important;
+}
+
+.desk-audit-hub__filter-hint {
+  font-size: 11px !important;
+  line-height: 1.35 !important;
+  margin: -2px 0 0 !important;
+  max-width: 220px;
+  color: rgba(255, 255, 255, 0.42) !important;
+}
+
+.desk-audit-hub__segmented.ant-segmented {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+@media (max-width: 720px) {
+  .desk-audit-hub__toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .desk-audit-hub__toolbar-actions {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .desk-audit-hub__export-block {
+    width: 100%;
+  }
+
+  .desk-audit-hub__export-hint {
+    max-width: 100%;
+  }
+
+  .desk-audit-hub__actions-sep {
+    width: 100%;
+    height: 1px;
+    align-self: stretch;
+    margin: 12px 0;
+  }
+
+  .desk-audit-hub__filter-block {
+    justify-content: flex-start;
+  }
+}
+
+.desk-audit-hub__mock-pill {
+  margin-inline-end: 0 !important;
+}
+
+.desk-audit-hub__table-card {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.desk-audit-hub__table-card .ant-card-body {
+  flex: 1;
+  min-height: 0;
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
+}
+
+.desk-audit-hub__table-card-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.desk-audit-hub__table-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.desk-audit-hub__table-main .ant-spin-nested-loading {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.desk-audit-hub__table-main .ant-spin-container {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.desk-audit-hub__pagination-bar {
+  flex-shrink: 0;
+  padding: 10px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.desk-audit-hub__pagination-rail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px 16px;
+  width: 100%;
+}
+
+.desk-audit-hub__pagination-meta {
+  font-size: 12px !important;
+  line-height: 1.4 !important;
+  color: rgba(255, 255, 255, 0.48) !important;
+  text-align: right;
+}
+
+.desk-audit-hub__pagination.ant-pagination {
+  margin: 0 !important;
+}
+
+.desk-audit-hub__pagination.ant-pagination .ant-pagination-item,
+.desk-audit-hub__pagination.ant-pagination .ant-pagination-prev .ant-pagination-item-link,
+.desk-audit-hub__pagination.ant-pagination .ant-pagination-next .ant-pagination-item-link {
+  background: rgba(0, 0, 0, 0.35) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.desk-audit-hub__pagination.ant-pagination .ant-pagination-item-active {
+  border-color: rgba(34, 211, 238, 0.45) !important;
+}
+
+.desk-audit-hub__pagination.ant-pagination .ant-pagination-item-active a {
+  color: rgba(167, 243, 208, 0.95) !important;
+}
+
+.desk-audit-hub__table.ant-table-wrapper {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+}
+
+.desk-audit-hub__table .ant-table {
+  background: transparent !important;
+}
+
+.desk-audit-hub__table .ant-table-container {
+  border-radius: 0 0 8px 8px;
+}
+
+.desk-audit-hub__group-collapse.ant-collapse {
+  background: transparent !important;
+}
+
+.desk-audit-hub__group-collapse .ant-collapse-item {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  margin-bottom: 6px;
+  border-radius: 8px !important;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.desk-audit-hub__group-collapse .ant-collapse-header {
+  padding: 10px 12px !important;
+  align-items: flex-start !important;
+}
+
+.desk-audit-hub__group-collapse .ant-collapse-content-box {
+  padding: 0 8px 10px !important;
+}
+
+.desk-audit-hub__group-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  text-align: left;
+  min-width: 0;
+}
+
+.desk-audit-hub__group-title {
+  color: rgba(255, 255, 255, 0.92) !important;
+  font-size: 13px !important;
+}
+
+.desk-audit-hub__group-meta {
+  font-size: 11px !important;
+}
+
+.desk-audit-hub__table--nested.ant-table-wrapper {
+  margin-top: 4px;
+}
+
+.desk-audit-hub__table--nested .ant-table {
+  background: rgba(0, 0, 0, 0.22) !important;
+  border-radius: 6px;
+}
+
+.desk-audit-hub__mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 12px;
+}
+
+.desk-audit-hub__event-code {
+  font-size: 12px !important;
+}
+
+.app-tab-route-placeholder {
+  max-width: 560px;
+  margin-top: 8px;
 }

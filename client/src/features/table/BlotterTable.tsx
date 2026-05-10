@@ -1,10 +1,11 @@
-import { Menu, Table, Tag } from 'antd'
+import { Menu, message, Table, Tag } from 'antd'
 import type { TableColumnsType, TableProps } from 'antd'
 import type { ColumnType } from 'antd/es/table'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Key, ReactNode } from 'react'
 import { isOrderOpenForAction } from '../blotter/api/orderActions'
+import { downloadBlotterCsv } from '../blotter/exportBlotterCsv'
 import type { Order, OrderStatus } from '../blotter/types'
 
 export type BlotterTableProps = {
@@ -456,6 +457,11 @@ export default function BlotterTable({
   const contextRecord = rowContextMenu?.record
   const canActOnOpenOrder = contextRecord ? isOrderOpenForAction(contextRecord) : false
 
+  const selectedKeySet = useMemo(
+    () => new Set(selectedRowKeys.map((k) => String(k))),
+    [selectedRowKeys],
+  )
+
   return (
     <>
       <Table<Order>
@@ -470,7 +476,6 @@ export default function BlotterTable({
           },
           onContextMenu: (e) => {
             e.preventDefault()
-            onSelectedRowKeysChange([record.id])
             onAuditFocusKeyChange(record.id)
             setRowContextMenu({ x: e.clientX, y: e.clientY, record })
           },
@@ -539,6 +544,12 @@ export default function BlotterTable({
                     label: 'Amend',
                     disabled: !onRowContextAmend || !canActOnOpenOrder,
                   },
+                  { type: 'divider' },
+                  {
+                    key: 'exportCsv',
+                    label: 'Export checked rows to CSV',
+                    disabled: selectedRowKeys.length === 0,
+                  },
                 ]}
                 onClick={({ key, domEvent }) => {
                   domEvent.stopPropagation()
@@ -547,6 +558,17 @@ export default function BlotterTable({
                   if (key === 'summarize') void onRowContextSummarize?.(id)
                   if (key === 'cancel') void onRowContextCancel?.(id)
                   if (key === 'amend') onRowContextAmend?.(id)
+                  if (key === 'exportCsv') {
+                    const rows = data.filter((o) => selectedKeySet.has(String(o.id)))
+                    if (rows.length === 0) {
+                      void message.warning('None of the checked rows are in the current filtered view.')
+                      return
+                    }
+                    downloadBlotterCsv(rows)
+                    void message.success(
+                      rows.length === 1 ? 'Exported 1 row' : `Exported ${rows.length} rows`,
+                    )
+                  }
                 }}
               />
             </div>

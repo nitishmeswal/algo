@@ -2,9 +2,11 @@ import type OpenAI from 'openai'
 
 import type { StepLog, TradeBookingRequest, TradeBookingResponse } from '../../../../shared/nlp/tradeBookingAgent.js'
 import { orderRowToJson } from '../../api/orderDto.js'
+import { insertAgentAuditLogFireAndForget } from '../../db/repos/agentAuditRepo.js'
 import { getOpenAIClient, openaiModel } from '../openaiClient.js'
 import { executeTradeBookingTool } from './tools/executeTradeTool.js'
 import { createTradeBookingContext } from './tools/tradeBookingContext.js'
+import type { TradeBookingToolContext } from './tools/types.js'
 
 const SYSTEM = `You are a trade-booking agent. The user describes a trade in natural language.
 
@@ -57,6 +59,31 @@ async function emitProgress(
   await onProgress({ steps: cloneSteps(steps) })
 }
 
+function auditTradeBookingDecision(ctx: TradeBookingToolContext, response: TradeBookingResponse): void {
+  const orderId =
+    response.outcome === 'booked' && response.order && typeof response.order.id === 'string'
+      ? response.order.id
+      : null
+  insertAgentAuditLogFireAndForget({
+    eventType: 'agent_decision',
+    sessionId: ctx.sessionId,
+    orderId,
+    decision: response.outcome,
+    decisionReason:
+      response.outcome === 'escalated'
+        ? response.reason
+        : response.outcome === 'error'
+          ? response.message
+          : null,
+    modelUsed: openaiModel(),
+    payload: {
+      userTextPreview: ctx.userText.slice(0, 500),
+      steps: response.steps,
+      ...(response.outcome === 'escalated' ? { failedStep: response.failedStep } : {}),
+    },
+  })
+}
+
 export async function runTradeBookingAgent(
   req: TradeBookingRequest,
   options?: { onProgress?: (snap: TradeBookingProgressSnapshot) => void | Promise<void> },
@@ -66,14 +93,16 @@ export async function runTradeBookingAgent(
 
   const client = getOpenAIClient()
   if (!client) {
+    const response: TradeBookingResponse = {
+      outcome: 'error',
+      message: 'Set OPENAI_API_KEY in the server environment to enable trade booking.',
+      steps: ctx.steps,
+    }
+    auditTradeBookingDecision(ctx, response)
     return {
       ok: false,
       httpStatus: 503,
-      response: {
-        outcome: 'error',
-        message: 'Set OPENAI_API_KEY in the server environment to enable trade booking.',
-        steps: ctx.steps,
-      },
+      response,
     }
   }
 
@@ -101,20 +130,32 @@ export async function runTradeBookingAgent(
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
       await emitProgress(onProgress, ctx.steps)
+      const response: TradeBookingResponse = {
+        outcome: 'error',
+        message: `OpenAI error: ${message}`,
+        steps: ctx.steps,
+      }
+      auditTradeBookingDecision(ctx, response)
       return {
         ok: false,
         httpStatus: 502,
-        response: { outcome: 'error', message: `OpenAI error: ${message}`, steps: ctx.steps },
+        response,
       }
     }
 
     const choice = completion.choices[0]?.message
     if (!choice) {
       await emitProgress(onProgress, ctx.steps)
+      const response: TradeBookingResponse = {
+        outcome: 'error',
+        message: 'OpenAI returned no choice.',
+        steps: ctx.steps,
+      }
+      auditTradeBookingDecision(ctx, response)
       return {
         ok: false,
         httpStatus: 502,
-        response: { outcome: 'error', message: 'OpenAI returned no choice.', steps: ctx.steps },
+        response,
       }
     }
 
@@ -129,14 +170,16 @@ export async function runTradeBookingAgent(
         if (bookResult.success) {
           break
         }
+        const response: TradeBookingResponse = {
+          outcome: 'escalated',
+          reason: String(bookResult.message ?? 'book_trade failed'),
+          failedStep: 'book_trade',
+          steps: ctx.steps,
+        }
+        auditTradeBookingDecision(ctx, response)
         return {
           ok: true,
-          response: {
-            outcome: 'escalated',
-            reason: String(bookResult.message ?? 'book_trade failed'),
-            failedStep: 'book_trade',
-            steps: ctx.steps,
-          },
+          response,
         }
       }
       break
@@ -170,14 +213,16 @@ export async function runTradeBookingAgent(
     }
 
     if (lastFailure) {
+      const response: TradeBookingResponse = {
+        outcome: 'escalated',
+        reason: lastFailure.message,
+        failedStep: lastFailure.tool,
+        steps: ctx.steps,
+      }
+      auditTradeBookingDecision(ctx, response)
       return {
         ok: true,
-        response: {
-          outcome: 'escalated',
-          reason: lastFailure.message,
-          failedStep: lastFailure.tool,
-          steps: ctx.steps,
-        },
+        response,
       }
     }
 
@@ -187,22 +232,26 @@ export async function runTradeBookingAgent(
   }
 
   if (ctx.orderRow) {
+    const response: TradeBookingResponse = {
+      outcome: 'booked',
+      order: orderRowToJson(ctx.orderRow),
+      steps: ctx.steps,
+    }
+    auditTradeBookingDecision(ctx, response)
     return {
       ok: true,
-      response: {
-        outcome: 'booked',
-        order: orderRowToJson(ctx.orderRow),
-        steps: ctx.steps,
-      },
+      response,
     }
   }
 
+  const response: TradeBookingResponse = {
+    outcome: 'error',
+    message: 'Agent did not complete booking. Edit the description and try again.',
+    steps: ctx.steps,
+  }
+  auditTradeBookingDecision(ctx, response)
   return {
     ok: true,
-    response: {
-      outcome: 'error',
-      message: 'Agent did not complete booking. Edit the description and try again.',
-      steps: ctx.steps,
-    },
+    response,
   }
 }

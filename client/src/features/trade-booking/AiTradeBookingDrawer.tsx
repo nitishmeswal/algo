@@ -127,6 +127,7 @@ export function AiTradeBookingDrawer({ open, onClose }: AiTradeBookingDrawerProp
         agentResult={agentResult}
         agentStepSnapshot={agentStepSnapshot}
         onClearAgentResult={clearAgentResult}
+        runHistoryOpen={open}
         footerExtra={
           <Typography.Text type="secondary" className="ai-trade-drawer__resize-hint">
             Drag the left edge to resize this drawer.

@@ -15,11 +15,38 @@ export type OrderAuditEventDto = {
   createdAt: string
 }
 
+/** One row from `agent_audit_log` returned with `GET /orders/:id/audit`. */
+export type AgentAuditEventDto = {
+  id: string
+  orderId: string | null
+  createdAt: string
+  eventType: string
+  sessionId: string | null
+  userId: string | null
+  inputText: string | null
+  filterQuery: string | null
+  filterResult: unknown | null
+  toolName: string | null
+  toolInput: unknown | null
+  toolOutput: unknown | null
+  toolStatus: string | null
+  decision: string | null
+  decisionReason: string | null
+  breachType: string | null
+  breachValue: string | null
+  breachThreshold: string | null
+  llmInsight: string | null
+  durationMs: number | null
+  modelUsed: string | null
+  payload: unknown | null
+}
+
 /** Successful JSON body from `GET /orders/:id/audit`. */
 export type OrderAuditApiResponse = {
   orderId: string
   rowCount: number
   events: OrderAuditEventDto[]
+  agentEvents: AgentAuditEventDto[]
 }
 
 function isRecord(x: unknown): x is Record<string, unknown> {
@@ -68,6 +95,49 @@ function parseAuditEvent(raw: unknown): OrderAuditEventDto | null {
   }
 }
 
+function parseJsonish(value: unknown): unknown | null {
+  if (value === null || value === undefined) return null
+  return value
+}
+
+function parseAgentAuditEvent(raw: unknown): AgentAuditEventDto | null {
+  if (!isRecord(raw)) return null
+  const id = raw.id
+  const createdAt = raw.createdAt
+  const eventType = raw.eventType
+  if (typeof id !== 'string' || typeof createdAt !== 'string' || typeof eventType !== 'string') return null
+  const orderId = raw.orderId
+  const numOrNull = (v: unknown): number | null => {
+    if (typeof v === 'number' && Number.isFinite(v)) return v
+    if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) return Number(v)
+    return null
+  }
+  return {
+    id,
+    orderId: typeof orderId === 'string' ? orderId : null,
+    createdAt,
+    eventType,
+    sessionId: typeof raw.sessionId === 'string' ? raw.sessionId : null,
+    userId: typeof raw.userId === 'string' ? raw.userId : null,
+    inputText: typeof raw.inputText === 'string' ? raw.inputText : null,
+    filterQuery: typeof raw.filterQuery === 'string' ? raw.filterQuery : null,
+    filterResult: parseJsonish(raw.filterResult),
+    toolName: typeof raw.toolName === 'string' ? raw.toolName : null,
+    toolInput: parseJsonish(raw.toolInput),
+    toolOutput: parseJsonish(raw.toolOutput),
+    toolStatus: typeof raw.toolStatus === 'string' ? raw.toolStatus : null,
+    decision: typeof raw.decision === 'string' ? raw.decision : null,
+    decisionReason: typeof raw.decisionReason === 'string' ? raw.decisionReason : null,
+    breachType: typeof raw.breachType === 'string' ? raw.breachType : null,
+    breachValue: typeof raw.breachValue === 'string' ? raw.breachValue : null,
+    breachThreshold: typeof raw.breachThreshold === 'string' ? raw.breachThreshold : null,
+    llmInsight: typeof raw.llmInsight === 'string' ? raw.llmInsight : null,
+    durationMs: numOrNull(raw.durationMs),
+    modelUsed: typeof raw.modelUsed === 'string' ? raw.modelUsed : null,
+    payload: parseJsonish(raw.payload),
+  }
+}
+
 function parseOrderAuditResponse(json: unknown): OrderAuditApiResponse | null {
   if (!isRecord(json)) return null
   const orderId = json.orderId
@@ -87,7 +157,16 @@ function parseOrderAuditResponse(json: unknown): OrderAuditApiResponse | null {
     if (!ev) return null
     events.push(ev)
   }
-  return { orderId, rowCount, events }
+  const agentEvents: AgentAuditEventDto[] = []
+  const agentRaw = json.agentEvents
+  if (Array.isArray(agentRaw)) {
+    for (const row of agentRaw) {
+      const a = parseAgentAuditEvent(row)
+      if (!a) return null
+      agentEvents.push(a)
+    }
+  }
+  return { orderId, rowCount, events, agentEvents }
 }
 
 function orderAuditUrl(orderId: string): string {
