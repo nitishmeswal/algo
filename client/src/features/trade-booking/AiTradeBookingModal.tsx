@@ -73,6 +73,7 @@ export function AiTradeBookingModal({ open, onClose }: AiTradeBookingModalProps)
         agentResult={agentResult}
         agentStepSnapshot={agentStepSnapshot}
         onClearAgentResult={clearAgentResult}
+        runHistoryOpen={open}
       />
     </Modal>
   )

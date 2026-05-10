@@ -24,6 +24,10 @@ export default defineConfig({
         changeOrigin: true,
         ws: true,
       },
+      '/audit': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
       '/orders': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,

@@ -1,47 +1,32 @@
 import { Alert, Button, Divider, Input, Steps, Table, Tag, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { Check } from 'lucide-react'
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import type { StepLog, TradeBookingResponse } from '../../../../shared/nlp/tradeBookingAgent'
 
+import { fetchTradeBookingRunHistory, type TradeBookingRunHistoryItem } from './fetchTradeBookingAgent'
 import { inferTradeFieldsPreview } from './inferTradeFieldsPreview'
 
 const TRADE_DESCRIPTION_MAX_LEN = 4000
 
-/** Mock booking history — replace with persisted runs (or session stack) when wiring data. */
-const MOCK_BOOKING_HISTORY_ROWS = [
-  {
-    key: '1',
-    at: '2026-05-09T09:14:22.000Z',
-    summary: 'Sell 50 MSFT limit 400, day, account OMS-A',
-    status: 'booked' as const,
-    detail: 'Order 8f3a…c21 on blotter.',
-  },
-  {
-    key: '2',
-    at: '2026-05-09T09:08:01.000Z',
-    summary: 'Buy 2,000 AAPL limit 285 GTC',
-    status: 'blocked' as const,
-    detail: 'Limit outside allowed band vs reference — edit price and retry.',
-  },
-  {
-    key: '3',
-    at: '2026-05-09T08:55:40.000Z',
-    summary: 'Sell 500 META market, venue NSDQ',
-    status: 'booked' as const,
-    detail: 'Order 2d91…7ae on blotter.',
-  },
-  {
-    key: '4',
-    at: '2026-05-09T08:41:12.000Z',
-    summary: 'Buy 100 AMZN limit 190',
-    status: 'error' as const,
-    detail: 'Agent unavailable — try again.',
-  },
-] as const
+type RunHistoryRow = {
+  key: string
+  at: string
+  summary: string
+  status: 'booked' | 'escalated' | 'error'
+  detail: string
+}
 
-type MockBookingHistoryRow = (typeof MOCK_BOOKING_HISTORY_ROWS)[number]
+function mapApiRunToRow(run: TradeBookingRunHistoryItem): RunHistoryRow {
+  return {
+    key: run.id,
+    at: run.at,
+    summary: run.summary,
+    status: run.outcome,
+    detail: run.detail,
+  }
+}
 
 /** One line, desk-friendly: local `YYYY-MM-DD HH:mm` (24h). */
 function formatRunHistoryWhen(iso: string): string {
@@ -54,13 +39,13 @@ function formatRunHistoryWhen(iso: string): string {
   return `${y}-${mo}-${day} ${h}:${m}`
 }
 
-const OUTCOME_TAG: Record<MockBookingHistoryRow['status'], { color: 'success' | 'warning' | 'error'; label: string }> = {
+const OUTCOME_TAG: Record<RunHistoryRow['status'], { color: 'success' | 'warning' | 'error'; label: string }> = {
   booked: { color: 'success', label: 'Booked' },
-  blocked: { color: 'warning', label: 'Blocked' },
+  escalated: { color: 'warning', label: 'Escalated' },
   error: { color: 'error', label: 'Error' },
 }
 
-const BOOKING_HISTORY_COLUMNS: ColumnsType<MockBookingHistoryRow> = [
+const BOOKING_HISTORY_COLUMNS: ColumnsType<RunHistoryRow> = [
   {
     title: 'When',
     dataIndex: 'at',
@@ -172,6 +157,8 @@ export type AiTradeBookingAgentContentProps = {
   onClearAgentResult: () => void
   /** Extra line(s) below recent runs (e.g. drawer resize hint). */
   footerExtra?: ReactNode
+  /** When true, loads persisted `agent_decision` runs from the server (pass modal/drawer `open`). */
+  runHistoryOpen?: boolean
 }
 
 export function AiTradeBookingAgentContent({
@@ -183,11 +170,45 @@ export function AiTradeBookingAgentContent({
   agentStepSnapshot,
   onClearAgentResult,
   footerExtra,
+  runHistoryOpen = false,
 }: AiTradeBookingAgentContentProps) {
   const [escalationBannerOpen, setEscalationBannerOpen] = useState(true)
+  const [runHistoryRows, setRunHistoryRows] = useState<RunHistoryRow[]>([])
+  const [runHistoryStatus, setRunHistoryStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+
+  useEffect(() => {
+    if (!runHistoryOpen) {
+      setRunHistoryStatus('idle')
+      return
+    }
+    let cancelled = false
+    setRunHistoryStatus('loading')
+    void fetchTradeBookingRunHistory()
+      .then((res) => {
+        if (cancelled) return
+        setRunHistoryRows(res.runs.map(mapApiRunToRow))
+        setRunHistoryStatus('ready')
+      })
+      .catch(() => {
+        if (cancelled) return
+        setRunHistoryRows([])
+        setRunHistoryStatus('error')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [runHistoryOpen, agentResult])
 
   const fieldChecks = useMemo(() => inferTradeFieldsPreview(tradeDescription), [tradeDescription])
   const verticalSteps = useMemo(() => buildVerticalSteps(agentStepSnapshot), [agentStepSnapshot])
+  /**
+   * All steps still `wait` and no live snapshot yet — suppress Ant Steps default `current` (step 0
+   * indigo) before the first SSE tick and when idle before any run.
+   */
+  const stepsSuppressDefaultCurrent =
+    verticalSteps.length > 0 &&
+    verticalSteps.every((s) => s.status === 'wait') &&
+    (!agentLoading || agentStepSnapshot == null)
 
   const requirementRow = [
     { key: 'side', label: 'Buy or sell', ok: fieldChecks.side },
@@ -317,12 +338,9 @@ export function AiTradeBookingAgentContent({
           <Steps
             direction="vertical"
             size="small"
-            className="ai-trade-agent__steps"
-            items={verticalSteps.map((item) => ({
-              ...item,
-              status:
-                agentLoading && agentStepSnapshot == null && item.status === 'wait' ? 'process' : item.status,
-            }))}
+            className={`ai-trade-agent__steps${stepsSuppressDefaultCurrent ? ' ai-trade-agent__steps--pristine' : ''}`}
+            {...(stepsSuppressDefaultCurrent ? { current: -1 } : {})}
+            items={verticalSteps}
           />
         </section>
 
@@ -331,16 +349,31 @@ export function AiTradeBookingAgentContent({
             Recent runs
           </Typography.Title>
           <Typography.Paragraph type="secondary" className="ai-trade-agent__run-history-lead">
-            See what you already sent and whether it landed — less duplicate tickets, faster handoffs to ops. (Mock
-            data.)
+            Completed agent runs from this desk (persisted). Refreshes when you open this panel or finish a run.
           </Typography.Paragraph>
-          <Table<MockBookingHistoryRow>
+          {runHistoryStatus === 'error' ? (
+            <Alert
+              type="warning"
+              showIcon
+              message="Could not load run history"
+              description="Check that the server is running and the database has been migrated."
+              className="ai-trade-agent__alert"
+            />
+          ) : null}
+          <Table<RunHistoryRow>
             className="ai-trade-agent__run-history"
             tableLayout="fixed"
             size="small"
             pagination={false}
+            loading={runHistoryStatus === 'loading'}
             columns={BOOKING_HISTORY_COLUMNS}
-            dataSource={[...MOCK_BOOKING_HISTORY_ROWS]}
+            dataSource={runHistoryRows}
+            locale={{
+              emptyText:
+                runHistoryStatus === 'ready' && runHistoryRows.length === 0
+                  ? 'No completed runs yet — run the agent to build history.'
+                  : 'No data',
+            }}
           />
           {footerExtra ? (
             <>

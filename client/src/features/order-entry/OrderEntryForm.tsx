@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AutoComplete, Button, Card, Form, Input, InputNumber, Select, Typography, message } from 'antd'
+import { AutoComplete, Button, Card, ConfigProvider, Form, Input, InputNumber, Select, Typography, message } from 'antd'
 import { useBlotterStore } from '../blotter/store/useBlotterStore'
 import type { OrderEntryPayload } from '../blotter/api/submitOrder'
 import { submitOrder } from '../blotter/api/submitOrder'
@@ -33,6 +33,19 @@ export default function OrderEntryForm() {
   const symbolOptions = useMemo(
     () => buildSymbolTypeaheadOptions(typeof symbolInput === 'string' ? symbolInput : '', bookSymbols),
     [symbolInput, bookSymbols],
+  )
+
+  const orderEntrySelectTheme = useMemo(
+    () => ({
+      components: {
+        Select: {
+          /** Match ticket `.ant-input` fill (`App.css`) — AD6 outlined Select uses this for `--ant-select-background-color`. */
+          selectorBg: 'rgba(0, 0, 0, 0.28)',
+          clearBg: 'rgba(0, 0, 0, 0.28)',
+        },
+      },
+    }),
+    [],
   )
 
   const previewPayload = useMemo(
@@ -96,6 +109,7 @@ export default function OrderEntryForm() {
       aria-label="New order"
     >
       <Card className="app-card app-card--form" bordered={false}>
+        <ConfigProvider theme={orderEntrySelectTheme}>
         <div className="order-entry-form__band">
           <div className="order-entry-form__band-inner">
             <span className="order-entry-form__band-label">New order ticket</span>
@@ -145,19 +159,23 @@ export default function OrderEntryForm() {
                         allowClear
                         options={symbolOptions}
                         filterOption={false}
-                        placeholder="Search or type symbol"
                         className="order-entry-symbol-autocomplete"
                         popupClassName="order-entry-symbol-typeahead-dropdown"
                         notFoundContent={
                           symbolOptions.length === 0 && symbolInput?.trim() ? 'No matches' : undefined
                         }
-                        maxLength={16}
-                      />
+                        style={{ width: '100%' }}
+                      >
+                        <Input placeholder="Search or type symbol" maxLength={16} className="order-entry-input--mono" />
+                      </AutoComplete>
                     </Form.Item>
 
                     <Form.Item label="Side" name="side" rules={[{ required: true, message: 'Side is required' }]}>
                       <Select
+                        size="middle"
                         placeholder="Side"
+                        className="order-entry-ticket-select"
+                        style={{ width: '100%' }}
                         options={[
                           { value: 'buy', label: 'Buy' },
                           { value: 'sell', label: 'Sell' },
@@ -193,7 +211,10 @@ export default function OrderEntryForm() {
 
                     <Form.Item label="Venue" name="venue" rules={[{ required: true, message: 'Venue is required' }]}>
                       <Select
+                        size="middle"
                         placeholder="Venue"
+                        className="order-entry-ticket-select"
+                        style={{ width: '100%' }}
                         options={[
                           { value: 'MOCK', label: 'MOCK' },
                           { value: 'MOCK_ALT', label: 'MOCK_ALT' },
@@ -211,6 +232,9 @@ export default function OrderEntryForm() {
                   <div className="order-entry-form__section-title">Advanced</div>
                   <Form.Item label="Order type" name="orderType" rules={[{ required: true, message: 'Order type is required' }]}>
                     <Select
+                      size="middle"
+                      className="order-entry-ticket-select"
+                      style={{ width: '100%' }}
                       options={[
                         { value: 'limit', label: 'Limit' },
                         { value: 'market', label: 'Market' },
@@ -230,7 +254,10 @@ export default function OrderEntryForm() {
                   ) : null}
                   <Form.Item label="Time in force" name="timeInForce" rules={[{ required: true, message: 'TIF is required' }]}>
                     <Select
+                      size="middle"
                       placeholder="TIF"
+                      className="order-entry-ticket-select"
+                      style={{ width: '100%' }}
                       options={[
                         { value: 'day', label: 'DAY' },
                         { value: 'gtc', label: 'GTC' },
@@ -309,6 +336,7 @@ export default function OrderEntryForm() {
             </div>
           </div>
         </Form>
+        </ConfigProvider>
       </Card>
     </section>
   )

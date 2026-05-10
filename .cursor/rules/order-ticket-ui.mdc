@@ -1,0 +1,30 @@
+---
+description: Frozen New order ticket UI — do not edit styling or OrderEntryForm wiring without explicit user request
+globs:
+  - client/src/App.css
+  - client/src/features/order-entry/OrderEntryForm.tsx
+alwaysApply: false
+---
+
+# Order ticket UI (frozen)
+
+The **New order ticket** layout and controls have fixed visual behavior (heights, backgrounds, borders, focus rings, Ant Design token wiring). **Do not modify** the areas below unless the user clearly asks to change the order ticket in the same task.
+
+## Do not change
+
+**`client/src/App.css`**
+
+- Rules for `.order-entry-ticket-select` (including `.ant-select-outlined` chains)
+- `.order-entry-symbol-autocomplete` and symbol typeahead dropdown
+- `.order-entry-form__panel--advanced` Select overrides
+- `.app-card.app-card--form .order-entry-form` blocks that style `.ant-input`, `.ant-select`, `.ant-input-number`, and related ticket controls
+
+**`client/src/features/order-entry/OrderEntryForm.tsx`**
+
+- Nested `ConfigProvider` `theme.components.Select` (`selectorBg`, `clearBg`, etc.)
+- Symbol: `AutoComplete` with an `Input` child (not combobox-only)
+- `Select` usage: `size="middle"`, `className="order-entry-ticket-select"`, full width where already wired (Side, Venue, advanced Order type / TIF)
+
+## Exception
+
+If the user explicitly requests adjusting or redesigning the order ticket UI, you may edit these files accordingly.

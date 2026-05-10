@@ -1,6 +1,7 @@
 import { Router } from 'express'
 
 import type { OrderAuditEventRow } from '../db/models.js'
+import { listAgentAuditLogsByOrderId, type AgentAuditLogRow } from '../db/repos/agentAuditRepo.js'
 import { listAuditEventsByOrderId } from '../db/repos/auditRepo.js'
 import { findOrderById, listOrders } from '../db/repos/ordersRepo.js'
 import { createOrderFromValidatedSubmit } from '../orders/createOrderFromValidatedSubmit.js'
@@ -53,10 +54,64 @@ function auditEventRowToJson(row: OrderAuditEventRow): AuditEventDto {
   }
 }
 
+type AgentAuditEventDto = {
+  id: string
+  orderId: string | null
+  createdAt: string
+  eventType: string
+  sessionId: string | null
+  userId: string | null
+  inputText: string | null
+  filterQuery: string | null
+  filterResult: unknown | null
+  toolName: string | null
+  toolInput: unknown | null
+  toolOutput: unknown | null
+  toolStatus: string | null
+  decision: string | null
+  decisionReason: string | null
+  breachType: string | null
+  breachValue: string | null
+  breachThreshold: string | null
+  llmInsight: string | null
+  durationMs: number | null
+  modelUsed: string | null
+  payload: unknown | null
+}
+
+function agentAuditRowToJson(row: AgentAuditLogRow): AgentAuditEventDto {
+  return {
+    id: row.id,
+    orderId: row.order_id,
+    createdAt: row.created_at.toISOString(),
+    eventType: row.event_type,
+    sessionId: row.session_id,
+    userId: row.user_id,
+    inputText: row.input_text,
+    filterQuery: row.filter_query,
+    filterResult: row.filter_result,
+    toolName: row.tool_name,
+    toolInput: row.tool_input,
+    toolOutput: row.tool_output,
+    toolStatus: row.tool_status,
+    decision: row.decision,
+    decisionReason: row.decision_reason,
+    breachType: row.breach_type,
+    breachValue: row.breach_value != null ? String(row.breach_value) : null,
+    breachThreshold: row.breach_threshold != null ? String(row.breach_threshold) : null,
+    llmInsight: row.llm_insight,
+    durationMs: row.duration_ms,
+    modelUsed: row.model_used,
+    payload: row.payload,
+  }
+}
+
 type OrderAuditResponse = {
   orderId: string
+  /** Total rows across `events` + `agentEvents`. */
   rowCount: number
   events: AuditEventDto[]
+  agentEvents: AgentAuditEventDto[]
 }
 
 type NotFoundResponse = {
@@ -122,11 +177,17 @@ router.get('/:id/audit', async (req, res, next) => {
       res.status(404).json(payload)
       return
     }
-    const rows = await listAuditEventsByOrderId(orderId)
+    const [orderRows, agentRows] = await Promise.all([
+      listAuditEventsByOrderId(orderId),
+      listAgentAuditLogsByOrderId(orderId),
+    ])
+    const events = orderRows.map(auditEventRowToJson)
+    const agentEvents = agentRows.map(agentAuditRowToJson)
     const payload: OrderAuditResponse = {
       orderId,
-      rowCount: rows.length,
-      events: rows.map(auditEventRowToJson),
+      rowCount: events.length + agentEvents.length,
+      events,
+      agentEvents,
     }
     res.status(200).json(payload)
   } catch (err) {

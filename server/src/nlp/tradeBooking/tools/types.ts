@@ -7,6 +7,8 @@ export type ToolJsonResult = Record<string, unknown> & {
 }
 
 export type TradeBookingToolContext = {
+  /** Correlates tool calls + final decision for one agent run. */
+  sessionId: string
   userText: string
   defaults?: TradeBookingDefaults
   steps: StepLog[]

@@ -3,6 +3,7 @@ import http from 'node:http'
 
 import express from 'express'
 
+import { auditRouter } from './api/auditRouter.js'
 import { nlpRouter } from './api/nlpRouter.js'
 import { ordersRouter } from './api/ordersRouter.js'
 import { attachBlotterStream, WS_PATH } from './realtime/blotterStream.js'
@@ -26,6 +27,7 @@ app.get(WS_PATH, (_req, res) => {
   })
 })
 
+app.use('/audit', auditRouter)
 app.use('/orders', ordersRouter)
 app.use('/nlp', nlpRouter)
 
@@ -46,10 +48,12 @@ server.listen(PORT, () => {
   console.log(`  GET  http://localhost:${PORT}/orders`)
   console.log(`  POST http://localhost:${PORT}/orders`)
   console.log(`  GET  http://localhost:${PORT}/orders/:id`)
+  console.log(`  GET  http://localhost:${PORT}/audit`)
   console.log(`  GET  http://localhost:${PORT}/orders/:id/audit`)
   console.log(`  POST http://localhost:${PORT}/nlp/parse-order-filter`)
   console.log(`  POST http://localhost:${PORT}/nlp/breach-insight`)
   console.log(`  POST http://localhost:${PORT}/nlp/trade-booking`)
   console.log(`  POST http://localhost:${PORT}/nlp/trade-booking/stream`)
+  console.log(`  GET  http://localhost:${PORT}/nlp/trade-booking/history`)
   console.log(`  WS   ws://localhost:${PORT}${WS_PATH}`)
 })
