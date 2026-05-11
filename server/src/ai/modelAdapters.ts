@@ -156,27 +156,33 @@ async function callOllama(messages: LlmMessage[], settings: AdapterSettings): Pr
   const baseUrl = (settings.ollamaBaseUrl || DEFAULT_OLLAMA_URL).replace(/\/$/, '')
   const modelName = settings.ollamaModel || DEFAULT_OLLAMA_MODEL
 
-  const resp = await fetch(`${baseUrl}/api/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: modelName,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
-      stream: false,
-      options: { temperature: 0.3, num_predict: 1024 },
-    }),
-  })
+  let resp: Response
+  try {
+    resp = await fetch(`${baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: modelName,
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        stream: false,
+        options: { temperature: 0.3, num_predict: 1024 },
+      }),
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (msg.includes('fetch failed') || msg.includes('ECONNREFUSED') || msg.includes('connection refused')) {
+      throw new Error(
+        `Cannot connect to Ollama at ${baseUrl}. Make sure Ollama is running: ollama serve`,
+      )
+    }
+    throw err
+  }
 
   if (!resp.ok) {
     const errText = await resp.text().catch(() => '')
     if (resp.status === 404 || errText.includes('not found')) {
       throw new Error(
         `Ollama model "${modelName}" not found. Run: ollama pull ${modelName}`,
-      )
-    }
-    if (errText.includes('connection refused') || errText.includes('ECONNREFUSED')) {
-      throw new Error(
-        `Cannot connect to Ollama at ${baseUrl}. Make sure Ollama is running: ollama serve`,
       )
     }
     throw new Error(`Ollama error (${resp.status}): ${errText.slice(0, 200)}`)
