@@ -93,6 +93,15 @@ export default function CryptoAgentPage() {
   }, [store.agentState?.status, selectedSymbol])
 
   const handleStart = useCallback(async () => {
+    if (selectedMode === 'live') {
+      const confirmed = window.confirm(
+        'You are about to start LIVE trading with real money.\n\n' +
+        'Make sure your exchange API keys are configured in Settings.\n' +
+        'The agent will place real orders on the exchange.\n\n' +
+        'Continue?'
+      )
+      if (!confirmed) return
+    }
     await store.startAgent(selectedModel, selectedMode, selectedSymbol, initialBalance)
   }, [store, selectedModel, selectedMode, selectedSymbol, initialBalance])
 
@@ -143,6 +152,14 @@ export default function CryptoAgentPage() {
           message={store.error}
           closable
           onClose={store.clearError}
+          style={{ marginBottom: 16 }}
+        />
+      )}
+
+      {store.agentState?.error && (
+        <Alert
+          type="warning"
+          message={`Agent error: ${store.agentState.error}`}
           style={{ marginBottom: 16 }}
         />
       )}
@@ -722,10 +739,11 @@ function SettingsDrawer() {
         </Form.Item>
         <Form.Item label="Trade Interval (seconds)" name="tradeIntervalMs">
           <InputNumber
-            min={10}
-            max={3600}
-            step={10}
+            min={10_000 as number}
+            max={3_600_000 as number}
+            step={10_000}
             formatter={(v) => `${((v as number) / 1000).toFixed(0)}s`}
+            parser={(v) => Number(v?.replace('s', '')) * 1000}
             style={{ width: '100%' }}
           />
         </Form.Item>

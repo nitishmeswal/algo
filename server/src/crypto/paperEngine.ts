@@ -8,8 +8,10 @@ import type {
 import { fetchTicker } from './exchange.js'
 
 const FEE_RATE = 0.001 // 0.1% — standard Binance spot fee
+const MIN_TRADE_USDT = 1 // Minimum trade size in USDT
 
 let portfolio: Portfolio = createFreshPortfolio(10)
+let tradeInProgress = false
 
 function createFreshPortfolio(initialBalance: number): Portfolio {
   return {
@@ -27,12 +29,15 @@ function createFreshPortfolio(initialBalance: number): Portfolio {
 }
 
 export function resetPaperPortfolio(initialBalance: number): Portfolio {
+  if (initialBalance < 1 || initialBalance > 1_000_000) {
+    throw new Error('Initial balance must be $1–$1,000,000')
+  }
   portfolio = createFreshPortfolio(initialBalance)
   return portfolio
 }
 
 export function getPaperPortfolio(): Portfolio {
-  return portfolio
+  return { ...portfolio, positions: portfolio.positions.map((p) => ({ ...p })), trades: [...portfolio.trades] }
 }
 
 export async function updatePositionPrices(): Promise<Portfolio> {
@@ -75,104 +80,118 @@ export async function executePaperTrade(
   model: string,
   reasoning: string,
 ): Promise<TradeRecord> {
-  const ticker = await fetchTicker(symbol)
-  const price = ticker.price
-  if (price <= 0) throw new Error('Cannot get valid price')
+  // Prevent concurrent trades that could corrupt portfolio state
+  if (tradeInProgress) throw new Error('Another trade is in progress')
+  tradeInProgress = true
 
-  const fee = quantityUSDT * FEE_RATE
-  const netUSDT = quantityUSDT - fee
-  const cryptoQty = netUSDT / price
-
-  if (side === 'buy') {
-    if (portfolio.balanceUSDT < quantityUSDT) {
-      throw new Error(
-        `Insufficient balance: ${portfolio.balanceUSDT.toFixed(2)} USDT < ${quantityUSDT.toFixed(2)} USDT`,
-      )
+  try {
+    if (quantityUSDT < MIN_TRADE_USDT) {
+      throw new Error(`Trade too small: $${quantityUSDT.toFixed(2)} < minimum $${MIN_TRADE_USDT}`)
     }
-    portfolio.balanceUSDT -= quantityUSDT
 
-    const existing = portfolio.positions.find(
-      (p) => p.symbol === symbol && p.side === 'buy',
-    )
-    if (existing) {
-      const totalQty = existing.quantity + cryptoQty
-      existing.avgEntryPrice =
-        (existing.avgEntryPrice * existing.quantity + price * cryptoQty) /
-        totalQty
-      existing.quantity = totalQty
-      existing.currentPrice = price
-      existing.unrealizedPnl = 0
-    } else {
-      const pos: Position = {
-        symbol,
-        quantity: cryptoQty,
-        avgEntryPrice: price,
-        currentPrice: price,
-        unrealizedPnl: 0,
-        side: 'buy',
+    const ticker = await fetchTicker(symbol)
+    const price = ticker.price
+    if (price <= 0) throw new Error('Cannot get valid price')
+
+    const fee = quantityUSDT * FEE_RATE
+    const netUSDT = quantityUSDT - fee
+    const cryptoQty = netUSDT / price
+
+    if (side === 'buy') {
+      if (portfolio.balanceUSDT < quantityUSDT) {
+        throw new Error(
+          `Insufficient balance: $${portfolio.balanceUSDT.toFixed(2)} < $${quantityUSDT.toFixed(2)} needed`,
+        )
       }
-      portfolio.positions.push(pos)
-    }
-  } else {
-    const existing = portfolio.positions.find(
-      (p) => p.symbol === symbol && p.side === 'buy',
-    )
-    if (!existing || existing.quantity <= 0) {
-      throw new Error('No position to sell')
-    }
-    const sellQty = Math.min(cryptoQty, existing.quantity)
-    const proceeds = sellQty * price
-    const sellFee = proceeds * FEE_RATE
-    portfolio.balanceUSDT += proceeds - sellFee
+      portfolio.balanceUSDT -= quantityUSDT
 
-    const pnl = (price - existing.avgEntryPrice) * sellQty - fee - sellFee
-    existing.quantity -= sellQty
-    if (existing.quantity < 1e-10) {
+      const existing = portfolio.positions.find(
+        (p) => p.symbol === symbol && p.side === 'buy',
+      )
+      if (existing) {
+        const totalQty = existing.quantity + cryptoQty
+        existing.avgEntryPrice =
+          (existing.avgEntryPrice * existing.quantity + price * cryptoQty) /
+          totalQty
+        existing.quantity = totalQty
+        existing.currentPrice = price
+        existing.unrealizedPnl = 0
+      } else {
+        const pos: Position = {
+          symbol,
+          quantity: cryptoQty,
+          avgEntryPrice: price,
+          currentPrice: price,
+          unrealizedPnl: 0,
+          side: 'buy',
+        }
+        portfolio.positions.push(pos)
+      }
+
+      const trade: TradeRecord = {
+        id: randomUUID(),
+        ts: Date.now(),
+        symbol,
+        side,
+        price,
+        quantity: cryptoQty,
+        cost: quantityUSDT,
+        fee,
+        pnl: 0,
+        model,
+        reasoning,
+        paper: true,
+      }
+      portfolio.trades.push(trade)
+      portfolio.totalTrades++
+      recalcPnl()
+      return trade
+    } else {
+      // SELL
+      const existing = portfolio.positions.find(
+        (p) => p.symbol === symbol && p.side === 'buy',
+      )
+      if (!existing || existing.quantity <= 0) {
+        throw new Error(`No ${symbol} position to sell`)
+      }
+
+      // Sell entire position (don't try to match USDT amount to crypto qty for sells)
+      const sellQty = existing.quantity
+      const proceeds = sellQty * price
+      const sellFee = proceeds * FEE_RATE
+      portfolio.balanceUSDT += proceeds - sellFee
+
+      const pnl = (price - existing.avgEntryPrice) * sellQty - sellFee
+
+      // Remove position
       portfolio.positions = portfolio.positions.filter((p) => p !== existing)
-    }
 
-    const trade: TradeRecord = {
-      id: randomUUID(),
-      ts: Date.now(),
-      symbol,
-      side,
-      price,
-      quantity: sellQty,
-      cost: quantityUSDT,
-      fee: fee + sellFee,
-      pnl,
-      model,
-      reasoning,
-      paper: true,
+      const trade: TradeRecord = {
+        id: randomUUID(),
+        ts: Date.now(),
+        symbol,
+        side,
+        price,
+        quantity: sellQty,
+        cost: proceeds,
+        fee: sellFee,
+        pnl,
+        model,
+        reasoning,
+        paper: true,
+      }
+      portfolio.trades.push(trade)
+      portfolio.totalTrades++
+      if (pnl > 0) portfolio.wins++
+      else portfolio.losses++
+      portfolio.winRate =
+        portfolio.totalTrades > 0
+          ? (portfolio.wins / portfolio.totalTrades) * 100
+          : 0
+      recalcPnl()
+      return trade
     }
-    portfolio.trades.push(trade)
-    portfolio.totalTrades++
-    if (pnl > 0) portfolio.wins++
-    else portfolio.losses++
-    portfolio.winRate =
-      portfolio.totalTrades > 0
-        ? (portfolio.wins / portfolio.totalTrades) * 100
-        : 0
-    recalcPnl()
-    return trade
+  } finally {
+    tradeInProgress = false
   }
-
-  const trade: TradeRecord = {
-    id: randomUUID(),
-    ts: Date.now(),
-    symbol,
-    side,
-    price,
-    quantity: cryptoQty,
-    cost: quantityUSDT,
-    fee,
-    pnl: 0,
-    model,
-    reasoning,
-    paper: true,
-  }
-  portfolio.trades.push(trade)
-  portfolio.totalTrades++
-  recalcPnl()
-  return trade
 }
