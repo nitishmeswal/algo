@@ -1,7 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { closeDbConnection, dbPool } from './connection.js'
+import { closeDbConnection, requirePool } from './connection.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -13,7 +13,7 @@ type MigrationFile = {
 }
 
 async function ensureMigrationsTable(): Promise<void> {
-  await dbPool.query(`
+  await requirePool().query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       name TEXT PRIMARY KEY,
       applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -34,14 +34,14 @@ async function readMigrations(): Promise<MigrationFile[]> {
 }
 
 async function appliedMigrationNames(): Promise<Set<string>> {
-  const result = await dbPool.query<{ name: string }>(
+  const result = await requirePool().query<{ name: string }>(
     'SELECT name FROM schema_migrations ORDER BY name ASC',
   )
   return new Set(result.rows.map((row) => row.name))
 }
 
 async function applyMigration(migration: MigrationFile): Promise<void> {
-  const client = await dbPool.connect()
+  const client = await requirePool().connect()
   try {
     await client.query('BEGIN')
     await client.query(migration.sql)

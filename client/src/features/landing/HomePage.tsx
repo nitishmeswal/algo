@@ -184,17 +184,17 @@ export default function HomePage() {
                 size="large"
                 className="landing-btn-gradient landing-btn-gradient--lg"
                 icon={<ArrowRightOutlined />}
-                onClick={() => navigate('/app')}
+                onClick={() => navigate('/agent')}
               >
-                Open demo workspace
+                Open Crypto AI Agent
               </Button>
               <Button
                 size="large"
                 className="landing-btn-ghost"
-                icon={<Sparkles className="landing-btn-ghost__sparkle" size={16} aria-hidden strokeWidth={2} />}
-                disabled
+                icon={<ArrowRightOutlined />}
+                onClick={() => navigate('/app')}
               >
-                Meet AI Analyst
+                Order Desk (Demo)
               </Button>
             </div>
             <p className="landing-hero__trust-badge landing-hero__trust-badge--demo">
