@@ -104,6 +104,8 @@ function getAdapterSettings(): AdapterSettings {
     openaiApiKey: currentSettings.openaiApiKey || process.env.OPENAI_API_KEY,
     deepseekApiKey: currentSettings.deepseekApiKey || process.env.DEEPSEEK_API_KEY,
     grokApiKey: currentSettings.grokApiKey || process.env.GROK_API_KEY,
+    ollamaBaseUrl: currentSettings.ollamaBaseUrl || process.env.OLLAMA_BASE_URL,
+    ollamaModel: currentSettings.ollamaModel || process.env.OLLAMA_MODEL,
   }
 }
 

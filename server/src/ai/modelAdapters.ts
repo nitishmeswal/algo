@@ -10,6 +10,7 @@ const adapters: Record<AiModel, (messages: LlmMessage[], settings: AdapterSettin
   gpt: callGpt,
   deepseek: callDeepSeek,
   grok: callGrok,
+  ollama: callOllama,
 }
 
 export type AdapterSettings = {
@@ -17,6 +18,8 @@ export type AdapterSettings = {
   openaiApiKey?: string
   deepseekApiKey?: string
   grokApiKey?: string
+  ollamaBaseUrl?: string
+  ollamaModel?: string
 }
 
 export function availableModels(settings: AdapterSettings): AiModel[] {
@@ -25,6 +28,8 @@ export function availableModels(settings: AdapterSettings): AiModel[] {
   if (settings.openaiApiKey) out.push('gpt')
   if (settings.deepseekApiKey) out.push('deepseek')
   if (settings.grokApiKey) out.push('grok')
+  // Ollama is always "available" — it checks connectivity at call time
+  out.push('ollama')
   return out
 }
 
@@ -141,5 +146,48 @@ async function callGrok(messages: LlmMessage[], settings: AdapterSettings): Prom
     text: resp.choices[0]?.message?.content ?? '',
     model: 'grok-3-mini-fast',
     tokensUsed: resp.usage?.total_tokens ?? 0,
+  }
+}
+
+const DEFAULT_OLLAMA_URL = 'http://localhost:11434'
+const DEFAULT_OLLAMA_MODEL = 'qwen3:8b'
+
+async function callOllama(messages: LlmMessage[], settings: AdapterSettings): Promise<LlmResponse> {
+  const baseUrl = (settings.ollamaBaseUrl || DEFAULT_OLLAMA_URL).replace(/\/$/, '')
+  const modelName = settings.ollamaModel || DEFAULT_OLLAMA_MODEL
+
+  const resp = await fetch(`${baseUrl}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: modelName,
+      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      stream: false,
+      options: { temperature: 0.3, num_predict: 1024 },
+    }),
+  })
+
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => '')
+    if (resp.status === 404 || errText.includes('not found')) {
+      throw new Error(
+        `Ollama model "${modelName}" not found. Run: ollama pull ${modelName}`,
+      )
+    }
+    if (errText.includes('connection refused') || errText.includes('ECONNREFUSED')) {
+      throw new Error(
+        `Cannot connect to Ollama at ${baseUrl}. Make sure Ollama is running: ollama serve`,
+      )
+    }
+    throw new Error(`Ollama error (${resp.status}): ${errText.slice(0, 200)}`)
+  }
+
+  const data = await resp.json()
+  const text = data.message?.content ?? ''
+
+  return {
+    text,
+    model: modelName,
+    tokensUsed: (data.prompt_eval_count ?? 0) + (data.eval_count ?? 0),
   }
 }

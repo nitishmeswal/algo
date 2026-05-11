@@ -72,7 +72,7 @@ export type Portfolio = z.infer<typeof portfolioSchema>
 export const agentStatusSchema = z.enum(['idle', 'running', 'paused', 'error'])
 export type AgentStatus = z.infer<typeof agentStatusSchema>
 
-export const aiModelSchema = z.enum(['claude', 'gpt', 'deepseek', 'grok'])
+export const aiModelSchema = z.enum(['claude', 'gpt', 'deepseek', 'grok', 'ollama'])
 export type AiModel = z.infer<typeof aiModelSchema>
 
 export const tradingModeSchema = z.enum(['paper', 'live'])
@@ -111,6 +111,8 @@ export const cryptoSettingsSchema = z.object({
   openaiApiKey: z.string().optional(),
   deepseekApiKey: z.string().optional(),
   grokApiKey: z.string().optional(),
+  ollamaBaseUrl: z.string().optional(),
+  ollamaModel: z.string().optional(),
   maxPositionUSDT: z.number().positive().default(5),
   stopLossPct: z.number().min(0.1).max(50).default(3),
   takeProfitPct: z.number().min(0.1).max(100).default(5),
