@@ -166,7 +166,7 @@ function parseDecisionJson(text: string): { action: 'buy' | 'sell' | 'hold'; con
   // Strip markdown fences, leading/trailing whitespace
   let cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
   // Try to extract JSON object if surrounded by other text
-  const jsonMatch = cleaned.match(/\{[\s\S]*?"action"[\s\S]*?\}/)
+  const jsonMatch = cleaned.match(/\{[\s\S]*"action"[\s\S]*\}/)
   if (jsonMatch) cleaned = jsonMatch[0]
 
   const parsed = JSON.parse(cleaned)
@@ -211,6 +211,14 @@ async function executeTrade(
   console.log(`[agent] LIVE ${side.toUpperCase()}: ${symbol} — $${amountUSDT.toFixed(2)} (~${cryptoQty.toFixed(8)} @ $${price.toFixed(2)})`)
   const order = await placeOrder(apiKey, secret, symbol, side, cryptoQty)
   console.log(`[agent] LIVE order placed: ${order.id} — status: ${order.status}`)
+
+  // Shadow-track in paper portfolio so position state, stop-loss, and take-profit work
+  try {
+    await executePaperTrade(symbol, side, amountUSDT, model, reasoning)
+  } catch (shadowErr) {
+    console.warn('[agent] Paper shadow-track failed (live order was placed):', shadowErr)
+  }
+
   return order
 }
 
