@@ -10,6 +10,8 @@
     "test": "tsx --test src/nlp/tradeBooking/tools/validators.test.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.95.2",
+    "ccxt": "^4.5.52",
     "dotenv": "^17.4.2",
     "express": "^5.1.0",
     "openai": "^6.36.0",

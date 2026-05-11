@@ -1,4 +1,4 @@
-import { dbPool } from '../connection.js'
+import { requirePool } from '../connection.js'
 
 /** Filter for `GET /audit?event_type=…` (omit or empty = all). */
 export type DeskAuditStreamFilter = 'orders' | 'agent' | 'breach' | 'nlp'
@@ -79,6 +79,6 @@ export async function listDeskAuditMerged(params: {
   offset: number
 }): Promise<DeskAuditMergedRow[]> {
   const streamParam = params.stream ?? null
-  const result = await dbPool.query<DeskAuditMergedRow>(STREAM_SQL, [streamParam, params.limit, params.offset])
+  const result = await requirePool().query<DeskAuditMergedRow>(STREAM_SQL, [streamParam, params.limit, params.offset])
   return result.rows
 }

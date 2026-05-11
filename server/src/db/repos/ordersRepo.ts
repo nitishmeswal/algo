@@ -1,7 +1,7 @@
 import type { PoolClient } from 'pg'
 import { randomUUID } from 'node:crypto'
 
-import { dbPool } from '../connection.js'
+import { requirePool } from '../connection.js'
 import type { OrderRow } from '../models.js'
 import { tryInsertAuditEvent } from './auditRepo.js'
 
@@ -160,7 +160,7 @@ const ORDERS_SELECT_COLUMNS = `
 `
 
 export async function insertOrderWithAudit(input: SubmitOrderInput): Promise<OrderRow> {
-  const client = await dbPool.connect()
+  const client = await requirePool().connect()
   const now = new Date()
   const id = randomUUID()
   const clientOrderId = input.clientOrderId?.trim() || randomUUID()
@@ -279,14 +279,14 @@ export async function insertOrderWithAudit(input: SubmitOrderInput): Promise<Ord
 }
 
 export async function listOrders(): Promise<OrderRow[]> {
-  const result = await dbPool.query<OrderRow>(
+  const result = await requirePool().query<OrderRow>(
     `SELECT ${ORDERS_SELECT_COLUMNS} FROM orders ORDER BY updated_at DESC`,
   )
   return result.rows
 }
 
 export async function findOrderById(id: string): Promise<OrderRow | undefined> {
-  const result = await dbPool.query<OrderRow>(
+  const result = await requirePool().query<OrderRow>(
     `SELECT ${ORDERS_SELECT_COLUMNS} FROM orders WHERE id = $1`,
     [id],
   )

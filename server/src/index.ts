@@ -4,6 +4,7 @@ import http from 'node:http'
 import express from 'express'
 
 import { auditRouter } from './api/auditRouter.js'
+import { cryptoRouter } from './api/cryptoRouter.js'
 import { nlpRouter } from './api/nlpRouter.js'
 import { ordersRouter } from './api/ordersRouter.js'
 import { attachBlotterStream, WS_PATH } from './realtime/blotterStream.js'
@@ -30,6 +31,7 @@ app.get(WS_PATH, (_req, res) => {
 app.use('/audit', auditRouter)
 app.use('/orders', ordersRouter)
 app.use('/nlp', nlpRouter)
+app.use('/crypto', cryptoRouter)
 
 app.use(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Express error arity
@@ -55,5 +57,10 @@ server.listen(PORT, () => {
   console.log(`  POST http://localhost:${PORT}/nlp/trade-booking`)
   console.log(`  POST http://localhost:${PORT}/nlp/trade-booking/stream`)
   console.log(`  GET  http://localhost:${PORT}/nlp/trade-booking/history`)
+  console.log(`  GET  http://localhost:${PORT}/crypto/price/:symbol`)
+  console.log(`  GET  http://localhost:${PORT}/crypto/candles/:symbol`)
+  console.log(`  GET  http://localhost:${PORT}/crypto/agent/state`)
+  console.log(`  POST http://localhost:${PORT}/crypto/agent/start`)
+  console.log(`  POST http://localhost:${PORT}/crypto/agent/stop`)
   console.log(`  WS   ws://localhost:${PORT}${WS_PATH}`)
 })

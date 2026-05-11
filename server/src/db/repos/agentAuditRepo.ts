@@ -1,4 +1,4 @@
-import { dbPool } from '../connection.js'
+import { dbPool, requirePool } from '../connection.js'
 
 const MAX_JSON_CHARS = 65_000
 
@@ -39,7 +39,7 @@ const AGENT_AUDIT_SELECT_COLUMNS = `
 
 /** Agentic / NLP rows tied to an order, oldest first (capped). */
 export async function listAgentAuditLogsByOrderId(orderId: string, limit = 500): Promise<AgentAuditLogRow[]> {
-  const result = await dbPool.query<AgentAuditLogRow>(
+  const result = await requirePool().query<AgentAuditLogRow>(
     `
     SELECT ${AGENT_AUDIT_SELECT_COLUMNS}
     FROM agent_audit_log
@@ -64,7 +64,7 @@ export type AgentDecisionAuditRow = {
 }
 
 export async function listAgentDecisionsRecent(limit = 50): Promise<AgentDecisionAuditRow[]> {
-  const result = await dbPool.query<AgentDecisionAuditRow>(
+  const result = await requirePool().query<AgentDecisionAuditRow>(
     `
     SELECT id, created_at, session_id, order_id, decision, decision_reason, payload
     FROM agent_audit_log
@@ -123,6 +123,7 @@ function jsonParam(value: unknown): string | null {
 
 /** Persists one row to `agent_audit_log`. */
 export async function insertAgentAuditLog(input: InsertAgentAuditLogInput): Promise<void> {
+  if (!dbPool) return
   await dbPool.query(
     `
     INSERT INTO agent_audit_log (

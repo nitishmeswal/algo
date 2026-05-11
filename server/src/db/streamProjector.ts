@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
-import { dbPool } from './connection.js'
+import { requirePool } from './connection.js'
 import { tryInsertAuditEvent } from './repos/auditRepo.js'
 import {
   applyOrderPatch,
@@ -95,7 +95,7 @@ async function projectInTransaction(event: Record<string, unknown>): Promise<voi
   const emittedAt = parseEmittedAt(emittedAtRaw)
   if (emittedAt === null) return
 
-  const client = await dbPool.connect()
+  const client = await requirePool().connect()
   try {
     await client.query('BEGIN')
 
