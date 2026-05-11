@@ -156,6 +156,8 @@ const settingsSchema = z.object({
   openaiApiKey: z.string().optional(),
   deepseekApiKey: z.string().optional(),
   grokApiKey: z.string().optional(),
+  ollamaBaseUrl: z.string().optional(),
+  ollamaModel: z.string().optional(),
 }).strict()
 
 cryptoRouter.post('/settings', (req: Request, res: Response) => {

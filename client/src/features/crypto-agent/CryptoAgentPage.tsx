@@ -40,6 +40,7 @@ const MODEL_LABELS: Record<AiModel, string> = {
   gpt: 'GPT-4o-mini (OpenAI)',
   deepseek: 'DeepSeek',
   grok: 'Grok (xAI)',
+  ollama: 'Ollama (Local)',
 }
 
 const SYMBOLS = [
@@ -716,6 +717,22 @@ function SettingsDrawer() {
         <Form.Item label="Grok API Key (xAI)" name="grokApiKey">
           <Input.Password placeholder="xai-..." />
         </Form.Item>
+
+        <Divider plain />
+        <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+          Ollama (Local LLM — Free, No API Key)
+        </Typography.Text>
+        <Form.Item label="Ollama URL" name="ollamaBaseUrl">
+          <Input placeholder="http://localhost:11434" />
+        </Form.Item>
+        <Form.Item label="Model Name" name="ollamaModel">
+          <Input placeholder="qwen3:8b (default)" />
+        </Form.Item>
+        <Alert
+          type="info"
+          message="Install Ollama, then run: ollama pull qwen3:8b — no API key needed."
+          style={{ marginBottom: 16 }}
+        />
 
         <Divider plain />
         <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>Exchange (Live Trading)</Typography.Text>

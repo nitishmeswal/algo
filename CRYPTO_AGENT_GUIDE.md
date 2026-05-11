@@ -2,7 +2,7 @@
 
 ## What This Is
 
-An AI-powered cryptocurrency trading agent built on top of FlowDesk. It uses real-time market data from Binance and AI models (Claude, GPT, DeepSeek, Grok) to make automated trading decisions.
+An AI-powered cryptocurrency trading agent built on top of FlowDesk. It uses real-time market data from exchanges (auto-detects KuCoin, Bybit, Kraken, Binance) and AI models (Claude, GPT, DeepSeek, Grok, or **Ollama local models — free, no API key**) to make automated trading decisions.
 
 **Two modes:**
 - **Paper Trading** — Uses real market prices but simulated money. Zero risk. Start here.
@@ -30,8 +30,17 @@ Go to `http://localhost:5173/agent` in your browser.
 
 ### 4. Configure your AI model
 
-Click **Settings** (gear icon) and enter at least one API key:
-- **Claude** (recommended): Get a key at https://console.anthropic.com/settings/keys
+Click **Settings** (gear icon) and configure at least one AI model:
+
+**Option A: Ollama (Free — recommended for testing)**
+1. Install Ollama: https://ollama.com/download (Windows/Mac/Linux)
+2. Pull a model: `ollama pull qwen3:8b`
+3. Ollama runs automatically — no API key needed
+4. In Settings, leave Ollama URL as default (`http://localhost:11434`)
+5. Optionally change the model name (default: `qwen3:8b`)
+
+**Option B: Cloud API**
+- **Claude**: Get a key at https://console.anthropic.com/settings/keys
 - **GPT**: Get a key at https://platform.openai.com/api-keys
 - **DeepSeek**: Get a key at https://platform.deepseek.com
 - **Grok**: Get a key at https://console.x.ai
@@ -137,10 +146,21 @@ You can run the agent with different AI models to compare performance:
 
 | Model | Speed | Cost | Best For |
 |-------|-------|------|----------|
+| **Ollama (Local)** | Medium | **FREE** | No API costs, privacy, offline capable |
 | Claude | Medium | ~$0.003/cycle | Nuanced analysis |
 | GPT-4o-mini | Fast | ~$0.001/cycle | Budget-friendly |
 | DeepSeek | Fast | ~$0.001/cycle | Cost-effective |
 | Grok | Fast | ~$0.002/cycle | Real-time market context |
+
+### Recommended Ollama Models for Trading
+
+| Model | Command | VRAM | Notes |
+|-------|---------|------|-------|
+| Qwen 3 8B (default) | `ollama pull qwen3:8b` | ~6GB | Best JSON output, fast reasoning |
+| Gemma 3n E4B | `ollama pull gemma3n:e4b` | ~4GB | Google's efficient model |
+| GLM-4 9B | `ollama pull glm4:9b` | ~7GB | Strong reasoning |
+| DeepSeek-R1 8B | `ollama pull deepseek-r1:8b` | ~6GB | Chain-of-thought |
+| Llama 3.1 8B | `ollama pull llama3.1:8b` | ~6GB | Meta's reliable workhorse |
 
 To test multiple models:
 1. Run agent with Model A for N cycles
@@ -202,7 +222,7 @@ Client (React + Vite)         Server (Express + Node)
 
 **Key files:**
 - `server/src/ai/tradingAgent.ts` — Main agent loop
-- `server/src/ai/modelAdapters.ts` — Claude/GPT/DeepSeek/Grok adapters
+- `server/src/ai/modelAdapters.ts` — Claude/GPT/DeepSeek/Grok/Ollama adapters
 - `server/src/crypto/exchange.ts` — Binance API via ccxt
 - `server/src/crypto/indicators.ts` — RSI, MACD, Bollinger, SMA, EMA, ATR
 - `server/src/crypto/paperEngine.ts` — Simulated trading engine
