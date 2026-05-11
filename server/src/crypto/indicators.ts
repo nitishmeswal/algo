@@ -45,6 +45,9 @@ function macd(
   const k26 = 2 / 27
   let ema12 = closes.slice(0, 12).reduce((s, v) => s + v, 0) / 12
   let ema26 = closes.slice(0, 26).reduce((s, v) => s + v, 0) / 26
+  for (let i = 12; i < 26; i++) {
+    ema12 = closes[i]! * k12 + ema12 * (1 - k12)
+  }
   for (let i = 26; i < closes.length; i++) {
     ema12 = closes[i]! * k12 + ema12 * (1 - k12)
     ema26 = closes[i]! * k26 + ema26 * (1 - k26)

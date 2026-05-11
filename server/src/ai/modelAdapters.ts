@@ -35,12 +35,32 @@ export async function callModel(
 ): Promise<LlmResponse> {
   const fn = adapters[model]
   if (!fn) throw new Error(`Unknown model: ${model}`)
-  return fn(messages, settings)
+  try {
+    const resp = await fn(messages, settings)
+    if (!resp.text || resp.text.trim().length === 0) {
+      throw new Error(`${model} returned empty response`)
+    }
+    return resp
+  } catch (err) {
+    if (err instanceof Error) {
+      // Provide actionable error messages
+      if (err.message.includes('401') || err.message.includes('authentication')) {
+        throw new Error(`${model} API key is invalid or expired. Update it in Settings.`)
+      }
+      if (err.message.includes('429') || err.message.includes('rate limit')) {
+        throw new Error(`${model} rate limit exceeded. Wait a moment and try again.`)
+      }
+      if (err.message.includes('insufficient_quota') || err.message.includes('billing')) {
+        throw new Error(`${model} billing issue — check your API account credits.`)
+      }
+    }
+    throw err
+  }
 }
 
 async function callClaude(messages: LlmMessage[], settings: AdapterSettings): Promise<LlmResponse> {
   const apiKey = settings.anthropicApiKey
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured')
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured — add it in Settings')
 
   const client = new Anthropic({ apiKey })
   const systemMsg = messages.find((m) => m.role === 'system')?.content ?? ''
@@ -69,7 +89,7 @@ async function callClaude(messages: LlmMessage[], settings: AdapterSettings): Pr
 
 async function callGpt(messages: LlmMessage[], settings: AdapterSettings): Promise<LlmResponse> {
   const apiKey = settings.openaiApiKey
-  if (!apiKey) throw new Error('OPENAI_API_KEY not configured')
+  if (!apiKey) throw new Error('OPENAI_API_KEY not configured — add it in Settings')
 
   const client = new OpenAI({ apiKey })
   const resp = await client.chat.completions.create({
@@ -88,7 +108,7 @@ async function callGpt(messages: LlmMessage[], settings: AdapterSettings): Promi
 
 async function callDeepSeek(messages: LlmMessage[], settings: AdapterSettings): Promise<LlmResponse> {
   const apiKey = settings.deepseekApiKey
-  if (!apiKey) throw new Error('DEEPSEEK_API_KEY not configured')
+  if (!apiKey) throw new Error('DEEPSEEK_API_KEY not configured — add it in Settings')
 
   const client = new OpenAI({ apiKey, baseURL: 'https://api.deepseek.com/v1' })
   const resp = await client.chat.completions.create({
@@ -107,7 +127,7 @@ async function callDeepSeek(messages: LlmMessage[], settings: AdapterSettings): 
 
 async function callGrok(messages: LlmMessage[], settings: AdapterSettings): Promise<LlmResponse> {
   const apiKey = settings.grokApiKey
-  if (!apiKey) throw new Error('GROK_API_KEY not configured')
+  if (!apiKey) throw new Error('GROK_API_KEY not configured — add it in Settings')
 
   const client = new OpenAI({ apiKey, baseURL: 'https://api.x.ai/v1' })
   const resp = await client.chat.completions.create({

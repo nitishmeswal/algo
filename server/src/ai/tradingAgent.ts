@@ -6,7 +6,7 @@ import type {
   IndicatorSnapshot,
   TradingMode,
 } from '../../../shared/crypto/types.js'
-import { fetchCandles, fetchTicker } from '../crypto/exchange.js'
+import { fetchCandles, fetchTicker, placeOrder } from '../crypto/exchange.js'
 import { computeIndicators } from '../crypto/indicators.js'
 import {
   executePaperTrade,
@@ -15,6 +15,9 @@ import {
   updatePositionPrices,
 } from '../crypto/paperEngine.js'
 import { callModel, availableModels, type AdapterSettings } from './modelAdapters.js'
+
+const LLM_TIMEOUT_MS = 30_000
+const MAX_CONSECUTIVE_ERRORS = 5
 
 const TRADING_SYSTEM_PROMPT = `You are an expert cryptocurrency trading agent. You analyze technical indicators and market data to make trading decisions.
 
@@ -47,6 +50,9 @@ const agentState: AgentState = {
 }
 
 let intervalHandle: ReturnType<typeof setInterval> | null = null
+let cycleRunning = false
+let consecutiveErrors = 0
+
 let currentSettings: CryptoSettings = {
   maxPositionUSDT: 5,
   stopLossPct: 3,
@@ -58,14 +64,35 @@ let currentSettings: CryptoSettings = {
 
 export function getAgentState(): AgentState {
   agentState.portfolio = getPaperPortfolio()
-  return agentState
+  return { ...agentState }
 }
 
 export function getSettings(): CryptoSettings {
-  return currentSettings
+  return { ...currentSettings }
 }
 
 export function updateSettings(patch: Partial<CryptoSettings>): CryptoSettings {
+  // Validate numeric settings
+  if (patch.maxPositionUSDT !== undefined) {
+    const v = Number(patch.maxPositionUSDT)
+    if (isNaN(v) || v < 1 || v > 100_000) throw new Error('maxPositionUSDT must be 1–100,000')
+    patch.maxPositionUSDT = v
+  }
+  if (patch.stopLossPct !== undefined) {
+    const v = Number(patch.stopLossPct)
+    if (isNaN(v) || v < 0.1 || v > 50) throw new Error('stopLossPct must be 0.1–50')
+    patch.stopLossPct = v
+  }
+  if (patch.takeProfitPct !== undefined) {
+    const v = Number(patch.takeProfitPct)
+    if (isNaN(v) || v < 0.1 || v > 100) throw new Error('takeProfitPct must be 0.1–100')
+    patch.takeProfitPct = v
+  }
+  if (patch.tradeIntervalMs !== undefined) {
+    const v = Number(patch.tradeIntervalMs)
+    if (isNaN(v) || v < 10_000 || v > 3_600_000) throw new Error('tradeIntervalMs must be 10s–1h')
+    patch.tradeIntervalMs = v
+  }
   currentSettings = { ...currentSettings, ...patch }
   if (patch.symbol) agentState.symbol = patch.symbol
   return currentSettings
@@ -119,7 +146,78 @@ PORTFOLIO:
 Provide your trading decision now.`
 }
 
+function callModelWithTimeout(
+  model: AiModel,
+  messages: { role: 'system' | 'user' | 'assistant'; content: string }[],
+  settings: AdapterSettings,
+): Promise<{ text: string; model: string; tokensUsed: number }> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`LLM timeout after ${LLM_TIMEOUT_MS / 1000}s — model may be overloaded`)),
+      LLM_TIMEOUT_MS,
+    )
+    callModel(model, messages, settings)
+      .then((r) => { clearTimeout(timer); resolve(r) })
+      .catch((e) => { clearTimeout(timer); reject(e) })
+  })
+}
+
+function parseDecisionJson(text: string): { action: 'buy' | 'sell' | 'hold'; confidence: number; reasoning: string } {
+  // Strip markdown fences, leading/trailing whitespace
+  let cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+  // Try to extract JSON object if surrounded by other text
+  const jsonMatch = cleaned.match(/\{[\s\S]*?"action"[\s\S]*?\}/)
+  if (jsonMatch) cleaned = jsonMatch[0]
+
+  const parsed = JSON.parse(cleaned)
+
+  // Validate required fields
+  const action = parsed.action
+  if (action !== 'buy' && action !== 'sell' && action !== 'hold') {
+    throw new Error(`Invalid action: ${action}`)
+  }
+  const confidence = Number(parsed.confidence)
+  if (isNaN(confidence)) throw new Error('Invalid confidence')
+
+  return {
+    action,
+    confidence: Math.min(100, Math.max(0, confidence)),
+    reasoning: String(parsed.reasoning ?? '').slice(0, 500),
+  }
+}
+
+async function executeTrade(
+  symbol: string,
+  side: 'buy' | 'sell',
+  amountUSDT: number,
+  model: string,
+  reasoning: string,
+) {
+  if (agentState.mode === 'paper') {
+    return executePaperTrade(symbol, side, amountUSDT, model, reasoning)
+  }
+
+  // Live trading
+  const apiKey = currentSettings.binanceApiKey
+  const secret = currentSettings.binanceApiSecret
+  if (!apiKey || !secret) {
+    throw new Error('Live trading requires exchange API key and secret in settings')
+  }
+
+  const ticker = await fetchTicker(symbol)
+  const price = ticker.price
+  const cryptoQty = (amountUSDT * 0.999) / price // 0.1% fee buffer
+
+  console.log(`[agent] LIVE ${side.toUpperCase()}: ${symbol} — $${amountUSDT.toFixed(2)} (~${cryptoQty.toFixed(8)} @ $${price.toFixed(2)})`)
+  const order = await placeOrder(apiKey, secret, symbol, side, cryptoQty)
+  console.log(`[agent] LIVE order placed: ${order.id} — status: ${order.status}`)
+  return order
+}
+
 async function runOneCycle(): Promise<AgentDecision | null> {
+  if (cycleRunning) return null
+  cycleRunning = true
+
   try {
     const symbol = agentState.symbol
     const [ticker, candles] = await Promise.all([
@@ -139,7 +237,7 @@ async function runOneCycle(): Promise<AgentDecision | null> {
     if (hasPosition && position) {
       if (positionPnlPct <= -currentSettings.stopLossPct) {
         const sellAmount = position.quantity * ticker.price
-        const trade = await executePaperTrade(
+        await executeTrade(
           symbol, 'sell', sellAmount, agentState.activeModel, `Stop-loss triggered at ${positionPnlPct.toFixed(2)}%`,
         )
         const decision: AgentDecision = {
@@ -153,12 +251,13 @@ async function runOneCycle(): Promise<AgentDecision | null> {
         agentState.lastDecision = decision
         agentState.decisionHistory.push(decision)
         agentState.portfolio = getPaperPortfolio()
-        console.log(`[agent] STOP-LOSS SELL: ${trade.id} — P&L: ${positionPnlPct.toFixed(2)}%`)
+        console.log(`[agent] STOP-LOSS SELL — P&L: ${positionPnlPct.toFixed(2)}%`)
+        consecutiveErrors = 0
         return decision
       }
       if (positionPnlPct >= currentSettings.takeProfitPct) {
         const sellAmount = position.quantity * ticker.price
-        const trade = await executePaperTrade(
+        await executeTrade(
           symbol, 'sell', sellAmount, agentState.activeModel, `Take-profit triggered at ${positionPnlPct.toFixed(2)}%`,
         )
         const decision: AgentDecision = {
@@ -172,7 +271,8 @@ async function runOneCycle(): Promise<AgentDecision | null> {
         agentState.lastDecision = decision
         agentState.decisionHistory.push(decision)
         agentState.portfolio = getPaperPortfolio()
-        console.log(`[agent] TAKE-PROFIT SELL: ${trade.id} — P&L: ${positionPnlPct.toFixed(2)}%`)
+        console.log(`[agent] TAKE-PROFIT SELL — P&L: ${positionPnlPct.toFixed(2)}%`)
+        consecutiveErrors = 0
         return decision
       }
     }
@@ -183,17 +283,16 @@ async function runOneCycle(): Promise<AgentDecision | null> {
     )
 
     const adapterSettings = getAdapterSettings()
-    const response = await callModel(agentState.activeModel, [
+    const response = await callModelWithTimeout(agentState.activeModel, [
       { role: 'system', content: TRADING_SYSTEM_PROMPT },
       { role: 'user', content: marketContext },
     ], adapterSettings)
 
     let parsed: { action: 'buy' | 'sell' | 'hold'; confidence: number; reasoning: string }
     try {
-      const cleaned = response.text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-      parsed = JSON.parse(cleaned)
+      parsed = parseDecisionJson(response.text)
     } catch {
-      console.error('[agent] Failed to parse LLM response:', response.text)
+      console.error('[agent] Failed to parse LLM response:', response.text.slice(0, 200))
       const decision: AgentDecision = {
         action: 'hold',
         confidence: 0,
@@ -204,13 +303,14 @@ async function runOneCycle(): Promise<AgentDecision | null> {
       }
       agentState.lastDecision = decision
       agentState.decisionHistory.push(decision)
+      consecutiveErrors++
       return decision
     }
 
     const decision: AgentDecision = {
       action: parsed.action,
-      confidence: Math.min(100, Math.max(0, parsed.confidence)),
-      reasoning: parsed.reasoning?.slice(0, 500) ?? '',
+      confidence: parsed.confidence,
+      reasoning: parsed.reasoning,
       model: agentState.activeModel,
       indicators: flatIndicators(indicators),
       ts: Date.now(),
@@ -221,19 +321,22 @@ async function runOneCycle(): Promise<AgentDecision | null> {
       const tradeAmount = Math.min(currentSettings.maxPositionUSDT, portfolio.balanceUSDT * 0.95)
       if (tradeAmount >= 1) {
         try {
-          const trade = await executePaperTrade(symbol, 'buy', tradeAmount, agentState.activeModel, decision.reasoning)
-          console.log(`[agent] BUY executed: ${trade.id} — $${tradeAmount.toFixed(2)} at $${trade.price.toFixed(2)}`)
+          await executeTrade(symbol, 'buy', tradeAmount, agentState.activeModel, decision.reasoning)
+          console.log(`[agent] BUY executed — $${tradeAmount.toFixed(2)} at $${ticker.price.toFixed(2)}`)
         } catch (err) {
           console.error('[agent] Buy failed:', err)
           decision.action = 'hold'
           decision.reasoning += ' (buy failed: ' + (err instanceof Error ? err.message : String(err)) + ')'
         }
+      } else {
+        decision.action = 'hold'
+        decision.reasoning += ' (insufficient balance for min trade)'
       }
     } else if (decision.action === 'sell' && decision.confidence > 65 && hasPosition) {
       try {
         const sellAmount = position!.quantity * ticker.price
-        const trade = await executePaperTrade(symbol, 'sell', sellAmount, agentState.activeModel, decision.reasoning)
-        console.log(`[agent] SELL executed: ${trade.id} — P&L: $${(trade.pnl ?? 0).toFixed(4)}`)
+        await executeTrade(symbol, 'sell', sellAmount, agentState.activeModel, decision.reasoning)
+        console.log(`[agent] SELL executed at $${ticker.price.toFixed(2)}`)
       } catch (err) {
         console.error('[agent] Sell failed:', err)
         decision.action = 'hold'
@@ -248,6 +351,8 @@ async function runOneCycle(): Promise<AgentDecision | null> {
     }
     agentState.cycleCount++
     agentState.portfolio = getPaperPortfolio()
+    agentState.error = null
+    consecutiveErrors = 0
 
     console.log(`[agent] Cycle #${agentState.cycleCount}: ${decision.action.toUpperCase()} (${decision.confidence}%) — ${decision.reasoning}`)
     return decision
@@ -255,7 +360,17 @@ async function runOneCycle(): Promise<AgentDecision | null> {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[agent] Cycle error:', msg)
     agentState.error = msg
+    consecutiveErrors++
+
+    // Auto-stop if too many consecutive errors
+    if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+      console.error(`[agent] ${MAX_CONSECUTIVE_ERRORS} consecutive errors — auto-stopping agent`)
+      stopAgent()
+      agentState.error = `Agent auto-stopped after ${MAX_CONSECUTIVE_ERRORS} consecutive errors. Last: ${msg}`
+    }
     return null
+  } finally {
+    cycleRunning = false
   }
 }
 
@@ -266,12 +381,19 @@ export async function startAgent(
   initialBalance?: number,
 ): Promise<AgentState> {
   if (agentState.status === 'running') {
-    return agentState
+    return getAgentState()
   }
 
   const models = getAvailableModels()
   if (!models.includes(model)) {
     throw new Error(`Model ${model} is not available. Configure its API key. Available: ${models.join(', ') || 'none'}`)
+  }
+
+  // Validate live trading prerequisites
+  if (mode === 'live') {
+    if (!currentSettings.binanceApiKey || !currentSettings.binanceApiSecret) {
+      throw new Error('Live trading requires Binance API key and secret. Configure them in Settings.')
+    }
   }
 
   if (mode === 'paper' && initialBalance) {
@@ -283,6 +405,9 @@ export async function startAgent(
   agentState.mode = mode
   agentState.error = null
   agentState.startedAt = Date.now()
+  agentState.cycleCount = 0
+  agentState.decisionHistory = []
+  consecutiveErrors = 0
   if (symbol) agentState.symbol = symbol
   agentState.portfolio = getPaperPortfolio()
 
@@ -302,7 +427,7 @@ export async function startAgent(
     }
   }, currentSettings.tradeIntervalMs)
 
-  return agentState
+  return getAgentState()
 }
 
 export function stopAgent(): AgentState {
@@ -311,8 +436,9 @@ export function stopAgent(): AgentState {
     intervalHandle = null
   }
   agentState.status = 'idle'
+  cycleRunning = false
   console.log('[agent] Stopped')
-  return agentState
+  return getAgentState()
 }
 
 function flatIndicators(ind: IndicatorSnapshot): Record<string, number> {
