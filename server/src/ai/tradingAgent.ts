@@ -706,12 +706,16 @@ export async function startAgent(
     resetPaperPortfolio(initialBalance)
   }
 
-  // Always auto-scale maxPositionUSDT to match balance on start
-  const effectivePositionPct = getEffectivePositionPct()
-  const balance = initialBalance ?? getPaperPortfolio().balanceUSDT
-  const autoMaxPosition = Math.max(5, Math.floor(balance * (effectivePositionPct / 100)))
-  currentSettings.maxPositionUSDT = autoMaxPosition
-  console.log(`[agent] Max position: $${autoMaxPosition} (${effectivePositionPct}% of $${balance})`)
+  // Auto-scale maxPositionUSDT in paper mode; preserve user's manual setting in live mode
+  if (mode === 'paper') {
+    const effectivePositionPct = getEffectivePositionPct()
+    const balance = initialBalance ?? getPaperPortfolio().balanceUSDT
+    const autoMaxPosition = Math.max(5, Math.floor(balance * (effectivePositionPct / 100)))
+    currentSettings.maxPositionUSDT = autoMaxPosition
+    console.log(`[agent] Max position: $${autoMaxPosition} (${effectivePositionPct}% of $${balance})`)
+  } else {
+    console.log(`[agent] Live mode — using user-configured max position: $${currentSettings.maxPositionUSDT}`)
+  }
 
   agentState.status = 'running'
   agentState.activeModel = model

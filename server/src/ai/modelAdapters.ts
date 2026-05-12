@@ -159,9 +159,10 @@ async function callOllamaOnce(
   modelName: string,
   messages: LlmMessage[],
 ): Promise<LlmResponse> {
-  // For qwen3 models, prepend /no_think to user message to disable thinking tokens
+  // Only prepend /no_think for qwen3 models to disable thinking tokens
+  const isQwen3 = modelName.toLowerCase().startsWith('qwen3')
   const processedMessages = messages.map((m) => {
-    if (m.role === 'user') {
+    if (m.role === 'user' && isQwen3) {
       return { role: m.role, content: '/no_think\n' + m.content }
     }
     return { role: m.role, content: m.content }
