@@ -11,6 +11,7 @@ import { cryptoRouter } from './api/cryptoRouter.js'
 import { nlpRouter } from './api/nlpRouter.js'
 import { ordersRouter } from './api/ordersRouter.js'
 import { attachBlotterStream, WS_PATH } from './realtime/blotterStream.js'
+import { getSupabase, isSupabaseEnabled } from './db/supabase/client.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DIST_DIR = path.resolve(__dirname, '../../dist')
@@ -71,4 +72,13 @@ server.listen(PORT, () => {
   console.log(`  API  http://localhost:${PORT}/crypto/agent/start`)
   console.log(`  API  http://localhost:${PORT}/crypto/agent/stop`)
   console.log(`  WS   ws://localhost:${PORT}${WS_PATH}`)
+
+  // Initialize Supabase connection
+  if (isSupabaseEnabled()) {
+    getSupabase()
+    console.log(`  DB   Supabase persistence enabled (cycles, trades, metrics stored)`)
+    console.log(`  API  http://localhost:${PORT}/crypto/metrics/:symbol`)
+  } else {
+    console.log(`  [!]  SUPABASE_URL not set — persistence disabled. Agent still works but no history stored.`)
+  }
 })
