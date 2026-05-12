@@ -54,31 +54,39 @@ npm install
 cd server && npm install && cd ..
 ```
 
-### Step 3: Start the backend server
+### Step 3: Start the app (ONE command)
 
 ```bash
-cd server
+npm start
+```
+
+This builds the frontend and starts the server. Open **http://localhost:8000/agent** in your browser.
+
+That's it — one terminal, one command, one port.
+
+<details>
+<summary><strong>Alternative: Dev mode (two terminals, hot reload)</strong></summary>
+
+If you're developing or want hot reload:
+
+**Terminal 1 (backend):**
+```bash
+cd server && npm run dev
+```
+
+**Terminal 2 (frontend):**
+```bash
 npm run dev
 ```
 
-Leave this terminal running. You should see `Server listening on port 8000`.
+Then open **http://localhost:5173/agent**.
+</details>
 
-### Step 4: Start the frontend (new terminal)
+### Step 4: Open the app
 
-Open a **new** terminal window:
+Go to **http://localhost:8000/agent** in your browser (or `http://localhost:5173/agent` in dev mode).
 
-```bash
-cd algo
-npm run dev
-```
-
-You should see `Local: http://localhost:5173/`.
-
-### Step 5: Open the app
-
-Go to **http://localhost:5173/agent** in your browser.
-
-### Step 6: Configure your AI model
+### Step 5: Configure your AI model
 
 Click the **Settings** gear icon in the top-right.
 
@@ -106,7 +114,7 @@ Click the **Settings** gear icon in the top-right.
 2. Paste the key in Settings under the corresponding field
 3. Click **Save**
 
-### Step 7: Start trading
+### Step 6: Start trading
 
 1. Select your **crypto pair** (BTC/USDT, ETH/USDT, etc.)
 2. Select your **AI model**
