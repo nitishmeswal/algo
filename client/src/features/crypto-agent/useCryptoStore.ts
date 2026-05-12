@@ -54,12 +54,12 @@ async function apiFetch<T>(url: string, opts?: RequestInit): Promise<T> {
     })
   } catch {
     throw new Error(
-      'Cannot connect to backend server. Run "cd server && npm run dev" first, then refresh.',
+      'Cannot connect to backend server. Run "npm start" from the project root, then refresh.',
     )
   }
   if (res.headers.get('content-type')?.includes('text/html')) {
     throw new Error(
-      'Backend server not found — got HTML instead of JSON. Make sure the server is running on port 8000.',
+      'Backend server not found — got HTML instead of JSON. Run "npm start" to start the server on port 8000.',
     )
   }
   const data = await res.json()
