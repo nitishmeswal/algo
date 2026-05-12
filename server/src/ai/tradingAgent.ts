@@ -43,25 +43,38 @@ const LLM_TIMEOUT_MS = 30_000
 const MAX_CONSECUTIVE_ERRORS = 5
 
 // Default system prompt (used when no personality is selected)
-const DEFAULT_SYSTEM_PROMPT = `You are an expert cryptocurrency trading AI agent with memory of past performance. You analyze technical indicators, market context, and your own trade history to make decisions.
+const DEFAULT_SYSTEM_PROMPT = `You are a professional cryptocurrency trader. Respond with ONLY a JSON object.
 
-RULES:
-1. You MUST respond with EXACTLY one JSON object — no markdown, no explanation outside the JSON.
-2. Format: {"action":"buy"|"sell"|"hold","confidence":0-100,"reasoning":"...","position_size_pct":10-100,"stop_loss_pct":1-10,"take_profit_pct":2-20}
-3. Be conservative — only trade when confidence > 65.
-4. For BUY: look for oversold RSI (<35), price near lower Bollinger, bullish MACD crossover, high volume.
-5. For SELL: look for overbought RSI (>70), price near upper Bollinger, bearish MACD crossover, take profit or stop loss.
-6. For HOLD: when signals are mixed, uncertainty is high, or confidence is below threshold.
-7. Never risk more than the allocated budget on a single trade.
-8. You CAN add to an existing position (scale in) if signals strengthen. Use position_size_pct to control how much more to buy.
-9. Factor in 24h price change and volume trends.
-10. Keep reasoning under 200 characters.
-11. LEARN from your performance history — if recent trades lost money, be more selective.
-12. Use position_size_pct to size trades dynamically (50=half of max, 100=full max position).
-13. Adjust stop_loss_pct and take_profit_pct based on volatility (ATR) — wider in volatile markets.
-14. If already holding and position is profitable, consider adding more. If position is losing, be cautious about adding.
+OUTPUT FORMAT (no markdown, no text outside JSON):
+{"action":"buy"|"sell"|"hold","confidence":0-100,"reasoning":"brief reason"}
 
-You are managing a trading portfolio. Every dollar counts. Be precise and adaptive.`
+TRADING RULES:
+- BUY when 3+ signals align: RSI<40 + MACD histogram turning positive + price near/below lower Bollinger + volume above average
+- SELL when 3+ signals align: RSI>65 + MACD histogram turning negative + price near/above upper Bollinger, OR when your position is profitable and momentum is fading
+- HOLD when signals conflict or fewer than 3 align
+
+VOLUME IS CRITICAL:
+- Volume above 120% of average = strong signal, increases confidence
+- Volume below 80% of average = weak signal, reduces confidence by 15 points
+- Never buy on low volume — it's a trap
+
+TREND CONFIRMATION:
+- Price above SMA20 + EMA12 > EMA26 = uptrend — favor buys
+- Price below SMA20 + EMA12 < EMA26 = downtrend — favor sells or hold
+- Sideways (price near SMA20, flat MACD) = hold, wait for breakout
+
+POSITION MANAGEMENT:
+- If holding a profitable position (>1%), hold or add if trend continues
+- If holding a losing position (>-2%), sell to cut losses unless strong reversal signals
+- Scale in: only add to winning positions with confirming volume
+
+CONFIDENCE GUIDE:
+- 80-100: All indicators strongly aligned + high volume + clear trend
+- 65-80: Most indicators aligned + decent volume
+- 50-65: Mixed signals — default to HOLD
+- Below 50: Conflicting signals — always HOLD
+
+Keep reasoning under 150 characters. Be decisive.`
 
 let activePersonality: PersonalityPreset | null = null
 
@@ -171,6 +184,47 @@ export function getAvailableModels(): AiModel[] {
   return availableModels(getAdapterSettings())
 }
 
+function assessTrend(indicators: IndicatorSnapshot, price: number): string {
+  const { ema12, ema26, sma20, macdHist } = indicators
+  if (ema12 == null || ema26 == null || sma20 == null) return 'UNKNOWN'
+  const aboveSma = price > sma20
+  const emaUptrend = ema12 > ema26
+  if (aboveSma && emaUptrend && (macdHist ?? 0) > 0) return 'STRONG UPTREND'
+  if (aboveSma && emaUptrend) return 'UPTREND'
+  if (!aboveSma && !emaUptrend && (macdHist ?? 0) < 0) return 'STRONG DOWNTREND'
+  if (!aboveSma && !emaUptrend) return 'DOWNTREND'
+  return 'SIDEWAYS'
+}
+
+function assessVolume(indicators: IndicatorSnapshot): string {
+  const { currentVolume, volumeSma20 } = indicators
+  if (currentVolume == null || volumeSma20 == null || volumeSma20 === 0) return 'UNKNOWN'
+  const ratio = currentVolume / volumeSma20
+  if (ratio > 1.5) return 'VERY HIGH'
+  if (ratio > 1.2) return 'HIGH'
+  if (ratio > 0.8) return 'NORMAL'
+  return 'LOW'
+}
+
+function countBuySignals(indicators: IndicatorSnapshot, price: number): number {
+  let count = 0
+  if (indicators.rsi14 != null && indicators.rsi14 < 40) count++
+  if (indicators.macdHist != null && indicators.macdHist > 0) count++
+  if (indicators.bollingerLower != null && price <= indicators.bollingerLower * 1.01) count++
+  if (indicators.currentVolume != null && indicators.volumeSma20 != null && indicators.currentVolume > indicators.volumeSma20 * 1.1) count++
+  if (indicators.ema12 != null && indicators.ema26 != null && indicators.ema12 > indicators.ema26) count++
+  return count
+}
+
+function countSellSignals(indicators: IndicatorSnapshot, price: number): number {
+  let count = 0
+  if (indicators.rsi14 != null && indicators.rsi14 > 65) count++
+  if (indicators.macdHist != null && indicators.macdHist < 0) count++
+  if (indicators.bollingerUpper != null && price >= indicators.bollingerUpper * 0.99) count++
+  if (indicators.ema12 != null && indicators.ema26 != null && indicators.ema12 < indicators.ema26) count++
+  return count
+}
+
 function buildMarketContext(
   symbol: string,
   price: number,
@@ -184,32 +238,28 @@ function buildMarketContext(
   const totalBalance = balanceUSDT + positionCostUSDT
   const exposurePct = totalBalance > 0 ? (positionCostUSDT / totalBalance) * 100 : 0
   const maxTradeSize = computeMaxTradeSize(balanceUSDT, positionCostUSDT, totalBalance)
+  const trend = assessTrend(indicators, price)
+  const volumeStrength = assessVolume(indicators)
+  const buySignals = countBuySignals(indicators, price)
+  const sellSignals = countSellSignals(indicators, price)
 
-  return `MARKET DATA for ${symbol}:
-- Current price: $${price.toFixed(2)}
-- 24h change: ${change24h.toFixed(2)}%
-- RSI(14): ${indicators.rsi14?.toFixed(1) ?? 'N/A'}
-- SMA(20): ${indicators.sma20?.toFixed(2) ?? 'N/A'}
-- EMA(12): ${indicators.ema12?.toFixed(2) ?? 'N/A'}
-- EMA(26): ${indicators.ema26?.toFixed(2) ?? 'N/A'}
-- MACD line: ${indicators.macdLine?.toFixed(4) ?? 'N/A'}
-- MACD signal: ${indicators.macdSignal?.toFixed(4) ?? 'N/A'}
-- MACD histogram: ${indicators.macdHist?.toFixed(4) ?? 'N/A'}
-- Bollinger upper: ${indicators.bollingerUpper?.toFixed(2) ?? 'N/A'}
-- Bollinger middle: ${indicators.bollingerMiddle?.toFixed(2) ?? 'N/A'}
-- Bollinger lower: ${indicators.bollingerLower?.toFixed(2) ?? 'N/A'}
+  return `${symbol} @ $${price.toFixed(2)} | 24h: ${change24h >= 0 ? '+' : ''}${change24h.toFixed(2)}%
+
+TREND: ${trend} | VOLUME: ${volumeStrength}
+BUY signals: ${buySignals}/5 | SELL signals: ${sellSignals}/4
+
+INDICATORS:
+- RSI(14): ${indicators.rsi14?.toFixed(1) ?? 'N/A'}${indicators.rsi14 != null ? (indicators.rsi14 < 30 ? ' [OVERSOLD]' : indicators.rsi14 > 70 ? ' [OVERBOUGHT]' : '') : ''}
+- MACD hist: ${indicators.macdHist?.toFixed(4) ?? 'N/A'}${indicators.macdHist != null ? (indicators.macdHist > 0 ? ' [BULLISH]' : ' [BEARISH]') : ''}
+- Bollinger: lower=$${indicators.bollingerLower?.toFixed(2) ?? '?'} mid=$${indicators.bollingerMiddle?.toFixed(2) ?? '?'} upper=$${indicators.bollingerUpper?.toFixed(2) ?? '?'}
+- EMA12/26: ${indicators.ema12?.toFixed(2) ?? '?'}/${indicators.ema26?.toFixed(2) ?? '?'}${indicators.ema12 != null && indicators.ema26 != null ? (indicators.ema12 > indicators.ema26 ? ' [BULLISH CROSS]' : ' [BEARISH CROSS]') : ''}
 - ATR(14): ${indicators.atr14?.toFixed(2) ?? 'N/A'}
-- Volume vs avg: ${indicators.currentVolume && indicators.volumeSma20 ? ((indicators.currentVolume / indicators.volumeSma20) * 100).toFixed(0) + '%' : 'N/A'}
+- Volume: ${indicators.currentVolume && indicators.volumeSma20 ? ((indicators.currentVolume / indicators.volumeSma20) * 100).toFixed(0) + '% of avg' : 'N/A'}
 
-PORTFOLIO:
-- Total portfolio value: $${totalBalance.toFixed(2)}
-- Available cash: $${balanceUSDT.toFixed(2)}
-- Currently holding: ${hasPosition ? 'YES' : 'NO'}${hasPosition ? `\n- Position cost: $${positionCostUSDT.toFixed(2)}` : ''}${hasPosition ? `\n- Position P&L: ${positionPnlPct.toFixed(2)}%` : ''}${hasPosition ? `\n- Current exposure: ${exposurePct.toFixed(0)}% of portfolio` : ''}
-- Max trade size available: $${maxTradeSize.toFixed(2)}
-- Stop loss: -${getEffectiveStopLossPct()}%
-- Take profit: +${getEffectiveTakeProfitPct()}%
-${hasPosition ? '- You CAN add to position if signals are strong (scale in).' : ''}
-Provide your trading decision now.`
+PORTFOLIO: $${totalBalance.toFixed(2)} total | $${balanceUSDT.toFixed(2)} cash | max trade: $${maxTradeSize.toFixed(2)}
+${hasPosition ? `POSITION: cost=$${positionCostUSDT.toFixed(2)} | P&L=${positionPnlPct >= 0 ? '+' : ''}${positionPnlPct.toFixed(2)}% | exposure=${exposurePct.toFixed(0)}%` : 'NO POSITION'}
+
+Decide now. Respond with JSON only: {"action":"buy"|"sell"|"hold","confidence":0-100,"reasoning":"..."}`
 }
 
 function computeMaxTradeSize(
@@ -656,14 +706,12 @@ export async function startAgent(
     resetPaperPortfolio(initialBalance)
   }
 
-  // Auto-scale maxPositionUSDT based on portfolio balance
+  // Always auto-scale maxPositionUSDT to match balance on start
   const effectivePositionPct = getEffectivePositionPct()
   const balance = initialBalance ?? getPaperPortfolio().balanceUSDT
   const autoMaxPosition = Math.max(5, Math.floor(balance * (effectivePositionPct / 100)))
-  if (currentSettings.maxPositionUSDT <= 5) {
-    currentSettings.maxPositionUSDT = autoMaxPosition
-    console.log(`[agent] Auto-scaled max position to $${autoMaxPosition} (${effectivePositionPct}% of $${balance})`)
-  }
+  currentSettings.maxPositionUSDT = autoMaxPosition
+  console.log(`[agent] Max position: $${autoMaxPosition} (${effectivePositionPct}% of $${balance})`)
 
   agentState.status = 'running'
   agentState.activeModel = model

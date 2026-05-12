@@ -10,7 +10,7 @@ import { fetchTicker } from './exchange.js'
 const FEE_RATE = 0.001 // 0.1% — standard Binance spot fee
 const MIN_TRADE_USDT = 1 // Minimum trade size in USDT
 
-let portfolio: Portfolio = createFreshPortfolio(10)
+let portfolio: Portfolio = createFreshPortfolio(1000)
 let tradeInProgress = false
 
 function createFreshPortfolio(initialBalance: number): Portfolio {

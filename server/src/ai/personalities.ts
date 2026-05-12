@@ -159,25 +159,22 @@ export function getAllPresets(): PersonalityPreset[] {
 }
 
 export function buildPersonalitySystemPrompt(preset: PersonalityPreset): string {
-  return `You are an expert cryptocurrency trading AI agent with memory of past performance. You analyze technical indicators, market context, and your own trade history to make decisions.
+  return `You are a professional cryptocurrency trader. Respond with ONLY a JSON object.
 
 ${preset.promptModifier}
 
-RULES:
-1. You MUST respond with EXACTLY one JSON object — no markdown, no explanation outside the JSON.
-2. Format: {"action":"buy"|"sell"|"hold","confidence":0-100,"reasoning":"...","position_size_pct":10-100,"stop_loss_pct":1-10,"take_profit_pct":2-20}
-3. Only trade when confidence > ${preset.confidenceThreshold}.
-4. For BUY: look for oversold RSI (<35), price near lower Bollinger, bullish MACD crossover, high volume.
-5. For SELL: look for overbought RSI (>70), price near upper Bollinger, bearish MACD crossover, take profit or stop loss.
-6. For HOLD: when signals are mixed, uncertainty is high, or confidence is below threshold.
-7. Never risk more than the allocated budget on a single trade.
-8. You CAN add to an existing position (scale in) if signals strengthen. Use position_size_pct to control how much more to buy.
-9. Factor in 24h price change and volume trends.
-10. Keep reasoning under 200 characters.
-11. LEARN from your performance history — if recent trades lost money, be more selective.
-12. Use position_size_pct to size trades dynamically (50=half of max, 100=full max position).
-13. Adjust stop_loss_pct and take_profit_pct based on volatility (ATR) — wider in volatile markets.
-14. If already holding and position is profitable, consider adding more. If position is losing, be cautious about adding.
+OUTPUT FORMAT (no markdown, no text outside JSON):
+{"action":"buy"|"sell"|"hold","confidence":0-100,"reasoning":"brief reason"}
 
-You are managing a trading portfolio. Every dollar counts. Be precise and adaptive.`
+TRADING RULES:
+- BUY when 3+ signals align: RSI<40 + MACD histogram positive + price near lower Bollinger + volume above average
+- SELL when 3+ signals align: RSI>65 + MACD histogram negative + price near upper Bollinger, OR position profitable and momentum fading
+- HOLD when signals conflict or fewer than 3 align
+- Only trade when confidence > ${preset.confidenceThreshold}
+
+VOLUME: Above 120% avg = strong. Below 80% avg = weak, reduce confidence by 15. Never buy on low volume.
+TREND: Price above SMA20 + EMA12>EMA26 = uptrend. Below = downtrend. Near SMA20 + flat MACD = sideways.
+POSITION: Profitable >1% = hold/add if trend continues. Losing >-2% = cut unless strong reversal signals.
+
+Keep reasoning under 150 chars. Be decisive.`
 }

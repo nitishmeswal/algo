@@ -61,7 +61,7 @@ export default function CryptoAgentPage() {
   const [selectedModel, setSelectedModel] = useState<AiModel>('claude')
   const [selectedMode, setSelectedMode] = useState<TradingMode>('paper')
   const [selectedSymbol, setSelectedSymbol] = useState('BTC/USDT')
-  const [initialBalance, setInitialBalance] = useState(10)
+  const [initialBalance, setInitialBalance] = useState(1000)
   const [selectedPersonality, setSelectedPersonality] = useState<PersonalityId | undefined>(undefined)
 
   // Initial load
@@ -121,7 +121,20 @@ export default function CryptoAgentPage() {
   }, [store, selectedSymbol])
 
   const isRunning = store.agentState?.status === 'running'
-  const portfolio = store.agentState?.portfolio ?? store.portfolio
+  const serverPortfolio = store.agentState?.portfolio ?? store.portfolio
+  // Show user-entered balance when idle (before agent starts), live portfolio when running
+  const portfolio = isRunning ? serverPortfolio : (serverPortfolio ?? {
+    balanceUSDT: initialBalance,
+    initialBalance,
+    totalPnl: 0,
+    totalPnlPct: 0,
+    positions: [],
+    trades: [],
+    winRate: 0,
+    totalTrades: 0,
+    wins: 0,
+    losses: 0,
+  })
   const ticker = store.ticker
   const indicators = store.indicators
 
@@ -333,14 +346,18 @@ export default function CryptoAgentPage() {
                 : 'Real orders — real money'}
             </span>
           </div>
-          <InputNumber
-            prefix="$"
-            value={initialBalance}
-            min={1}
-            max={100000}
-            onChange={(v) => setInitialBalance(v ?? 10)}
-            style={{ width: 110 }}
-          />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+            <InputNumber
+              prefix="$"
+              value={initialBalance}
+              min={1}
+              max={100000}
+              onChange={(v) => setInitialBalance(v ?? 1000)}
+              style={{ width: 130 }}
+              disabled={isRunning}
+            />
+            <span style={{ fontSize: 10, color: '#888' }}>Paper Balance</span>
+          </div>
         </div>
       </Card>
 

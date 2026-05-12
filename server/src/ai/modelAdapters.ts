@@ -152,9 +152,20 @@ async function callGrok(messages: LlmMessage[], settings: AdapterSettings): Prom
 const DEFAULT_OLLAMA_URL = 'http://localhost:11434'
 const DEFAULT_OLLAMA_MODEL = 'qwen3:8b'
 
-async function callOllama(messages: LlmMessage[], settings: AdapterSettings): Promise<LlmResponse> {
-  const baseUrl = (settings.ollamaBaseUrl || DEFAULT_OLLAMA_URL).replace(/\/$/, '')
-  const modelName = settings.ollamaModel || DEFAULT_OLLAMA_MODEL
+const OLLAMA_MAX_RETRIES = 2
+
+async function callOllamaOnce(
+  baseUrl: string,
+  modelName: string,
+  messages: LlmMessage[],
+): Promise<LlmResponse> {
+  // For qwen3 models, prepend /no_think to user message to disable thinking tokens
+  const processedMessages = messages.map((m) => {
+    if (m.role === 'user') {
+      return { role: m.role, content: '/no_think\n' + m.content }
+    }
+    return { role: m.role, content: m.content }
+  })
 
   let resp: Response
   try {
@@ -163,9 +174,10 @@ async function callOllama(messages: LlmMessage[], settings: AdapterSettings): Pr
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: modelName,
-        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        messages: processedMessages,
         stream: false,
-        options: { temperature: 0.3, num_predict: 1024 },
+        format: 'json',
+        options: { temperature: 0.2, num_predict: 512 },
       }),
     })
   } catch (err) {
@@ -189,11 +201,30 @@ async function callOllama(messages: LlmMessage[], settings: AdapterSettings): Pr
   }
 
   const data = await resp.json()
-  const text = data.message?.content ?? ''
+  let text = data.message?.content ?? ''
+
+  // Strip <think>...</think> blocks that qwen3 models may emit
+  text = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
 
   return {
     text,
     model: modelName,
     tokensUsed: (data.prompt_eval_count ?? 0) + (data.eval_count ?? 0),
   }
+}
+
+async function callOllama(messages: LlmMessage[], settings: AdapterSettings): Promise<LlmResponse> {
+  const baseUrl = (settings.ollamaBaseUrl || DEFAULT_OLLAMA_URL).replace(/\/$/, '')
+  const modelName = settings.ollamaModel || DEFAULT_OLLAMA_MODEL
+
+  for (let attempt = 0; attempt <= OLLAMA_MAX_RETRIES; attempt++) {
+    const result = await callOllamaOnce(baseUrl, modelName, messages)
+    if (result.text && result.text.trim().length > 2) {
+      return result
+    }
+    if (attempt < OLLAMA_MAX_RETRIES) {
+      console.warn(`[ollama] Empty response, retrying (${attempt + 1}/${OLLAMA_MAX_RETRIES})...`)
+    }
+  }
+  throw new Error('ollama returned empty response after retries')
 }
