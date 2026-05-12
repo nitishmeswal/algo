@@ -1,124 +1,201 @@
-# FlowDesk
+# AlgoTrader AI — Crypto Trading Agent
 
-**FlowDesk** is aimed at becoming a **modern order-management and trading workspace**: one place to watch **live order flow**, manage lifecycle (submit, amend, cancel), see **P&L and exposure**, drill into a **field-level audit trail**, and layer **AI and natural language** on top—always anchored to structured, verifiable facts from the book, not hand-wavy guesses.
+An AI-powered cryptocurrency trading agent that uses real-time market data and AI models to make automated trading decisions. Supports **paper trading** (zero risk) and **live trading** (real money on exchanges).
 
-![FlowDesk landing page](screens/home-page.png)
+**Live demo:** [algo-chi-five.vercel.app](https://algo-chi-five.vercel.app/)
 
-![FlowDesk workspace — blotter, order entry, stats, audit trail](screens/blotter.png)
+---
 
-**Where this repo is headed**
+## What It Does
 
-- **Real connectivity** — authenticated APIs and WebSockets for orders, fills, and reference data; server-side validation, idempotent submits, and durable history.  
-- **Desk-grade UX** — fast virtualized blotters, saved layouts, alerts, and workflows that match how PMs and traders actually work.  
-- **Compliance and ops** — immutable-style audit narratives, exportable trails, and clear separation between **deterministic metrics** and **optional LLM prose**.  
-- **AI as an assistant** — row summaries, EOD narratives, and NLP filters that consume **typed facts** from the store (summaries, selections, aggregates) so outputs stay checkable against the grid.
+- Fetches real-time crypto prices from exchanges (KuCoin, Bybit, Kraken, Binance — auto-detects best available)
+- Computes technical indicators: RSI(14), MACD, Bollinger Bands, SMA(20), EMA(12/26), ATR(14)
+- Sends market data to your chosen AI model
+- AI returns BUY / SELL / HOLD with confidence score (0–100%)
+- Executes trades automatically when confidence > 65%
+- Auto stop-loss (-3%) and take-profit (+5%) protect your capital
+- Runs every 60 seconds, 24/7
 
-**What ships today**
+## AI Models Supported
 
-A **demo workspace** with a marketing **landing page**, a **dark Ant Design** shell, a **typed blotter domain** in **Zustand**, mock **real-time-style** stream events, virtualized **tables**, **order entry**, **stats / NLP filter UI**, and an **order → event audit tree** wired to the same ingestion path—built with **Vite**, **React**, and **TypeScript**.
+| Mode | Model | Cost | Setup |
+|------|-------|------|-------|
+| **Offline (Free)** | Ollama (Qwen 3, Gemma, GLM-4, DeepSeek local) | Free | Install Ollama + pull model |
+| Online | Claude (Anthropic) | ~$0.003/cycle | API key |
+| Online | GPT-4o-mini (OpenAI) | ~$0.001/cycle | API key |
+| Online | DeepSeek | ~$0.001/cycle | API key |
+| Online | Grok (xAI) | ~$0.002/cycle | API key |
 
-## Stack
+---
 
-**Client**
+## Local Setup (Step by Step)
 
-- React 18 + TypeScript + Vite  
-- Ant Design 5 (layout, form, tables, dark `ConfigProvider`)  
-- Zustand for blotter state and stream ingestion  
-- React Router  
+### Prerequisites
 
-**Server**
+You need **Node.js** (v18 or higher) installed on your computer.
 
-- Node.js + TypeScript (run with **tsx**)  
-- Express 5 (HTTP API: `GET /orders`, health, etc.)  
-- **OpenAI** official Node SDK for **`POST /nlp/parse-order-filter`** (NL → `ParsedOrderFilter` JSON, validated with **Zod** in [`shared/nlp/parsedOrderFilter.ts`](shared/nlp/parsedOrderFilter.ts))  
-- **ws** (WebSocket blotter stream)  
-- PostgreSQL (**`pg`**) for orders + audit event persistence  
+- **Windows:** Download from [nodejs.org](https://nodejs.org/) → run the installer
+- **Mac:** `brew install node` or download from [nodejs.org](https://nodejs.org/)
+- **Linux:** `sudo apt install nodejs npm` or use [nvm](https://github.com/nvm-sh/nvm)
 
-## Run it
+### Step 1: Clone the repo
 
-### Client (Vite + React)
+Open a terminal (Command Prompt on Windows, Terminal on Mac/Linux):
+
+```bash
+git clone https://github.com/nitishmeswal/algo.git
+cd algo
+```
+
+### Step 2: Install dependencies
 
 ```bash
 npm install
-npm run dev
+cd server && npm install && cd ..
 ```
 
-Open `/` for the landing experience and `/app` for the FlowDesk workspace.
-
-Other client/root scripts:
-- `npm run build`
-- `npm run lint`
-- `npm run preview`
-
-The React app lives under **`client/`** (`client/src`, `client/index.html`, `client/public`). Builds emit to **`dist/`** at the repository root.
-
-### Server (Express + ws)
-
-Express + **`ws`** in **`server/`**: **`GET /health`**, WebSocket **`/blotter-stream`**, and one JSON text frame per message using the same discriminated event shape the client ingests (`order_created`, `order_updated`, `order_cancelled`, `order_rejected`, `heartbeat`).
-
-Current behavior in `server/src/index.ts`:
-
-- Per-connection state (`sequence`, order counter, in-memory live order map)
-- Immediate `order_created` on connect
-- Continuous interval-based mock lifecycle events (create/update/reject/cancel)
-- Independent heartbeat tick every 4s
-- Interval cleanup on socket close
-
-`GET /blotter-stream` returns a JSON hint (streams are **WebSocket**, not a normal HTTP page).
-
-Dev proxy: with client `npm run dev`, Vite proxies **`/blotter-stream`**, **`/orders`**, and **`/nlp`** to **`127.0.0.1:8000`** (same as the server’s default **`PORT`**). If you run the API on another port, set **`PORT`** when starting the server **and** point `vite.config.ts` `server.proxy` at that port.
-
-**NLP filter parsing (OpenAI):** set **`OPENAI_API_KEY`** (and optionally **`OPENAI_MODEL`**, default `gpt-4o-mini`) in a **server** env file or repo-root **`.env`** (see [`.env.example`](.env.example)). The server exposes **`POST /nlp/parse-order-filter`** with JSON body `{ "text": "…" }` and returns `{ "filter": { … } }` validated against the shared Zod `ParsedOrderFilter` schema. Without a key, that route responds **503** with a clear message.
+### Step 3: Start the backend server
 
 ```bash
-cd server && npm install
-# start server (listens on 8000 by default)
+cd server
 npm run dev
-# other terminal — health check:
-curl http://localhost:8000/health
-# optional: npx wscat -c ws://localhost:8000/blotter-stream
 ```
 
-From the repo root you can run **`npm run dev:server`** (same as running `npm run dev` inside `server/`). Override port with **`PORT`** if needed, and keep Vite’s proxy target in sync.
+Leave this terminal running. You should see `Server listening on port 8000`.
 
-To drive the workspace from the stream server instead of the in-browser mock, set **`VITE_BLOTTER_WS_URL`** (see [`.env.example`](.env.example)), e.g. `ws://127.0.0.1:8000/blotter-stream`, or use the Vite dev proxy with **`ws://127.0.0.1:5173/blotter-stream`** while **`npm run dev`** and **`npm run dev:server`** are both running.
+### Step 4: Start the frontend (new terminal)
 
-## Features covered
+Open a **new** terminal window:
 
-- [x] **Typed blotter domain** — `Order`, branded ids, and discriminated `BlotterStreamEvent` shapes shared by mock stream and UI  
-- [x] **Single ingestion path** — Zustand store merges all stream-style events via `ingestEvent` (no ad-hoc row patches in components)  
-- [x] **Dual entry of orders** — configurable mock emitter plus delayed `submitOrder` API; both emit `order_created` / updates into the store  
-- [x] **Blotter table UX** — sort & column filters, virtual scroll, grouped headers, fixed selection + key reference columns, P&L column  
-- [x] **Order ticket & layout** — Ant `Form` + validation, collapsible order column (preference persisted in `localStorage`), stats strip  
-- [x] **Order submit form** — `OrderEntryForm` ticket (`client/src/features/order-entry/`) with validation and submit into the blotter / stream ingestion path  
-- [x] **`GET /orders/:id/audit`** — HTTP API returning persisted `order_audit_events` for an order (for bottom audit tree / detail)  
-- [x] **Audit trail (mocked for now)** — tree-table style audit surface for hierarchy previews (mock tree-table UI) plus stream-derived audit domain in store/mappers
-- [x] **Configure AI filter** — stats strip **Apply** calls **`POST /nlp/parse-order-filter`** via [`fetchParsedOrderFilterFromNlp`](client/src/features/blotter/api/parseOrderFilterNlpApi.ts); rows are pre-filtered with [`filterOrdersByParsedFilter`](client/src/features/blotter/nlp/applyParsedOrderFilter.ts) in [`PrimeBlotterApp`](client/src/PrimeBlotterApp.tsx) (`filterOrdersByTextQuery` removed from that path)  
+```bash
+cd algo
+npm run dev
+```
 
-## Main todos
+You should see `Local: http://localhost:5173/`.
 
-- [x] Enrich mock stream by reusing the same data types and event shapes as the websocket/backend feed.
-- [x] Configure backend data layer (Postgres, connection management, migrations baseline).
-- [x] Add Postgres tables for audit and audit events (initial schema).
-- [x] Create `auditRepo`, `ordersRepo` and `streamProjector` to ingest event envelopes and dedupe safely into DB 
-- [x] **Fetch → delta init** — `GET /orders` hydrates the blotter store (`hydrateOrdersFromApi`), then the WebSocket opens for stream deltas (`useBlotterLiveBootstrap` gates `useBlotterWebSocketStream`); dev uses same-origin `/orders` via Vite proxy (optional `VITE_BLOTTER_HTTP_URL`).
-- [x] Configure API layer endpoint: `GET /orders` (list).  
-- [x] Expose `GET /orders/:id/audit` — `listAuditEventsByOrderId` in `server/src/db/repos/auditRepo.ts`, route on `ordersRouter`.  
-- [ ] Consume `GET /orders/:id/audit` in the audit tree UI.
-- [ ] Implement audit trail tree view from API data (shape, transform to tree, render).
-- [ ] Configure master/detail view for order list and selected order context.
+### Step 5: Open the app
 
-## Roadmap
+Go to **http://localhost:5173/agent** in your browser.
 
-Cross-cutting work (**production hardening**, **AI / NLP on top of deterministic facts**) is tracked in [`docs/roadmap.md`](docs/roadmap.md) so this README stays shorter.
+### Step 6: Configure your AI model
 
-## Where things live
+Click the **Settings** gear icon in the top-right.
+
+**Option A — Free local AI (Ollama):**
+
+1. Download Ollama from [ollama.com/download](https://ollama.com/download)
+   - **Windows:** Run the `.exe` installer
+   - **Mac:** Download the `.dmg`, drag to Applications
+   - **Linux:** `curl -fsSL https://ollama.com/install.sh | sh`
+2. Open a terminal and run:
+   ```bash
+   ollama pull qwen3:8b
+   ```
+   Wait for the download (~5GB). This only needs to happen once.
+3. In the app Settings, select **"Ollama (Local)"** as your model
+4. Leave the Ollama URL as default (`http://localhost:11434`)
+
+**Option B — Cloud API key:**
+
+1. Get an API key from any provider:
+   - Claude: [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys)
+   - GPT: [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+   - DeepSeek: [platform.deepseek.com](https://platform.deepseek.com)
+   - Grok: [console.x.ai](https://console.x.ai)
+2. Paste the key in Settings under the corresponding field
+3. Click **Save**
+
+### Step 7: Start trading
+
+1. Select your **crypto pair** (BTC/USDT, ETH/USDT, etc.)
+2. Select your **AI model**
+3. Keep mode as **Paper** (simulated — no real money)
+4. Set initial balance (default $10)
+5. Click **Start Agent**
+
+The agent will analyze markets every 60 seconds and make trading decisions automatically.
+
+---
+
+## Live Trading (Real Money)
+
+> **WARNING:** Live trading involves real financial risk. The AI can and will make losing trades. Start with the minimum amount.
+
+1. Create a [Binance](https://www.binance.com) account (or use your existing one)
+2. Create API keys: Binance → API Management → Create API
+   - Enable **Spot Trading** permission
+   - **Disable** withdrawal permission (safety)
+3. In the app Settings:
+   - Paste your **Binance API Key** and **Secret**
+   - Switch mode to **Live**
+   - Set **Max Position** to your budget
+4. Click **Start Agent**
+
+Profits accumulate in your Binance USDT balance. Cash out via Binance → Wallet → Withdraw.
+
+---
+
+## Recommended Ollama Models
+
+For an **RTX 5070 (12GB VRAM)** or similar GPU:
+
+| Model | Pull Command | VRAM | Best For |
+|-------|-------------|------|----------|
+| **Qwen 3 8B** (default) | `ollama pull qwen3:8b` | ~6GB | Best structured output |
+| Gemma 3n E4B | `ollama pull gemma3n:e4b` | ~4GB | Lightweight, fast |
+| GLM-4 9B | `ollama pull glm4:9b` | ~7GB | Strong reasoning |
+| DeepSeek-R1 8B | `ollama pull deepseek-r1:8b` | ~6GB | Chain-of-thought |
+| Llama 3.1 8B | `ollama pull llama3.1:8b` | ~6GB | Reliable workhorse |
+
+You can change the model in Settings → Ollama → Model Name.
+
+---
+
+## Project Structure
 
 | Area | Path |
 |------|------|
-| Routes & landing | `client/src/App.tsx`, `client/src/features/landing/` |
-| Workspace (blotter shell, stats, order form) | `client/src/PrimeBlotterApp.tsx`, `client/src/App.css` |
-| Blotter store & stream types | `client/src/features/blotter/store/useBlotterStore.ts`, `client/src/features/blotter/types.ts` |
-| Live: `GET /orders` → hydrate, then WS | `client/src/features/blotter/realtime/useBlotterLiveBootstrap.ts`, `useBlotterWebSocketStream.ts`, `blotterWebSocketAdapter.ts` · [flow](docs/blotter-fetch-then-websocket.md) |
-| Order grid | `client/src/features/table/BlotterTable.tsx` |
-| API, WebSocket stream, Postgres | `server/src/index.ts`, `server/src/realtime/blotterStream.ts`, `server/src/db/` |
+| Landing page | `client/src/features/landing/` |
+| Trading agent dashboard | `client/src/features/crypto-agent/` |
+| AI model adapters | `server/src/ai/modelAdapters.ts` |
+| Trading agent loop | `server/src/ai/tradingAgent.ts` |
+| Exchange connectivity | `server/src/crypto/exchange.ts` |
+| Technical indicators | `server/src/crypto/indicators.ts` |
+| Paper trading engine | `server/src/crypto/paperEngine.ts` |
+| API routes | `server/src/api/cryptoRouter.ts` |
+| Shared types | `shared/crypto/types.ts` |
+
+## Tech Stack
+
+- **Frontend:** React 18, TypeScript, Vite, Ant Design 5
+- **Backend:** Node.js, Express, TypeScript
+- **Exchange:** CCXT (KuCoin, Bybit, Kraken, Binance)
+- **AI:** Anthropic SDK, OpenAI SDK, Ollama API, DeepSeek, Grok
+- **Indicators:** Custom RSI, MACD, Bollinger, SMA, EMA, ATR
+
+---
+
+## Troubleshooting
+
+**"Cannot connect to Ollama"**
+→ Make sure Ollama is running. Open a terminal and run `ollama serve`.
+
+**"Model not found"**
+→ Pull the model first: `ollama pull qwen3:8b`
+
+**"Model X is not available"**
+→ Configure the API key in Settings for that model.
+
+**Agent stuck on HOLD**
+→ Normal when market signals are mixed. The AI only trades on high-confidence signals (>65%).
+
+**Build errors**
+→ Run `npm install` in both the root and `server/` directories.
+
+**Port already in use**
+→ Kill the existing process: `npx kill-port 8000` and `npx kill-port 5173`
+
+---
+
+*Built on [FlowDesk](https://github.com/ahadb/flow-desk) · Personal use · Not financial advice*
