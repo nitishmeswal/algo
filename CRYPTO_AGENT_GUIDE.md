@@ -227,3 +227,58 @@ Client (React + Vite)         Server (Express + Node)
 - `server/src/crypto/indicators.ts` — RSI, MACD, Bollinger, SMA, EMA, ATR
 - `server/src/crypto/paperEngine.ts` — Simulated trading engine
 - `client/src/features/crypto-agent/` — Full dashboard UI
+
+---
+
+## Maximizing Profitability
+
+### Model Selection for Trading
+
+The AI model you choose directly impacts trading quality. Here's the ranking for trading analysis:
+
+**Cloud models (best accuracy):**
+1. **Claude Sonnet** — Best nuanced market reasoning. Recommended for live trading with real money.
+2. **GPT-4o** — Strong structured output. Use `gpt-4o` (not `gpt-4o-mini`) for higher quality if budget allows.
+3. **Grok** — Has real-time context from X/Twitter which can help with sentiment.
+4. **DeepSeek** — Good chain-of-thought reasoning at low cost.
+
+**Local models (free, needs GPU):**
+1. **Qwen 3 14B** (Q4) — Best local model for 12GB VRAM. Run: `ollama pull qwen3:14b-q4_K_M`
+2. **Qwen 3 8B** — Default, fast, good structured JSON output. Run: `ollama pull qwen3:8b`
+3. **DeepSeek-R1 14B** (Q4) — Strong reasoning. Run: `ollama pull deepseek-r1:14b`
+4. **GLM-4 9B** — Good analytical reasoning. Run: `ollama pull glm4:9b`
+
+### Risk Parameter Tuning
+
+In Settings, you can adjust these parameters:
+
+| Parameter | Default | Aggressive | Conservative |
+|-----------|---------|------------|--------------|
+| Stop-loss | -3% | -5% | -2% |
+| Take-profit | +5% | +10% | +3% |
+| Max position | $5 | $10–50 | $2–3 |
+| Confidence threshold | 65% | 55% | 75% |
+| Trade interval | 60s | 30s | 120s |
+
+**For maximum growth:**
+- Use a higher-quality model (Claude or Qwen 3 14B)
+- Set take-profit to +8–10% (let winners run longer)
+- Set stop-loss to -4–5% (give trades more room to breathe)
+- Increase max position as your balance grows
+- Lower confidence threshold to 55% to catch more opportunities (but more risk)
+
+### Higher-Tier API Keys
+
+If you're willing to spend on API costs for better trading:
+- **Anthropic:** Upgrade to Scale tier for higher rate limits → [console.anthropic.com](https://console.anthropic.com)
+- **OpenAI:** Use `gpt-4o` instead of `gpt-4o-mini` for deeper analysis → set `OPENAI_MODEL=gpt-4o`
+- **xAI:** Grok has real-time market context from social media
+
+### Tips for Growing Your Account
+
+1. **Start with paper trading** — Run for at least 24-48 hours to see how the AI performs
+2. **Pick volatile but liquid pairs** — BTC/USDT and ETH/USDT have the best liquidity. SOL/USDT is more volatile (bigger swings = more opportunity)
+3. **Let winners run** — Increase take-profit to +8% or +10%
+4. **Compound gains** — As your balance grows, increase max position proportionally
+5. **Run 24/7** — Crypto markets never close. Use night mode to keep trading while you sleep
+6. **Compare models** — Run different models on paper trading and compare P&L over a week
