@@ -15,15 +15,26 @@ import {
   updatePositionPrices,
 } from '../crypto/paperEngine.js'
 import { callModel, availableModels, type AdapterSettings } from './modelAdapters.js'
+import { buildMemoryContext } from './memoryContext.js'
+import {
+  persistCycle,
+  persistTrade,
+  persistPerformance,
+  persistError,
+  type CycleRow,
+  type TradeRow,
+  type PerformanceRow,
+} from '../db/supabase/persistence.js'
+import { isSupabaseEnabled } from '../db/supabase/client.js'
 
 const LLM_TIMEOUT_MS = 30_000
 const MAX_CONSECUTIVE_ERRORS = 5
 
-const TRADING_SYSTEM_PROMPT = `You are an expert cryptocurrency trading agent. You analyze technical indicators and market data to make trading decisions.
+const TRADING_SYSTEM_PROMPT = `You are an expert cryptocurrency trading AI agent with memory of past performance. You analyze technical indicators, market context, and your own trade history to make decisions.
 
 RULES:
 1. You MUST respond with EXACTLY one JSON object — no markdown, no explanation outside the JSON.
-2. Format: {"action":"buy"|"sell"|"hold","confidence":0-100,"reasoning":"..."}
+2. Format: {"action":"buy"|"sell"|"hold","confidence":0-100,"reasoning":"...","position_size_pct":10-100,"stop_loss_pct":1-10,"take_profit_pct":2-20}
 3. Be conservative — only trade when confidence > 65.
 4. For BUY: look for oversold RSI (<35), price near lower Bollinger, bullish MACD crossover, high volume.
 5. For SELL: look for overbought RSI (>70), price near upper Bollinger, bearish MACD crossover, take profit or stop loss.
@@ -32,8 +43,11 @@ RULES:
 8. Consider the current position — don't buy if already holding, suggest sell if profit target hit.
 9. Factor in 24h price change and volume trends.
 10. Keep reasoning under 200 characters.
+11. LEARN from your performance history — if recent trades lost money, be more selective.
+12. Use position_size_pct to size trades dynamically (50=half of max, 100=full max position).
+13. Adjust stop_loss_pct and take_profit_pct based on volatility (ATR) — wider in volatile markets.
 
-You are managing a small portfolio ($5-50 range). Every dollar counts. Be precise.`
+You are managing a trading portfolio. Every dollar counts. Be precise and adaptive.`
 
 const agentState: AgentState = {
   status: 'idle',
@@ -195,33 +209,59 @@ async function executeTrade(
   model: string,
   reasoning: string,
 ) {
+  let result: { price?: number; quantity?: number; fee?: number; pnl?: number } | undefined
+
   if (agentState.mode === 'paper') {
-    return executePaperTrade(symbol, side, amountUSDT, model, reasoning)
+    const trade = await executePaperTrade(symbol, side, amountUSDT, model, reasoning)
+    result = { price: trade.price, quantity: trade.quantity, fee: trade.fee, pnl: trade.pnl }
+  } else {
+    // Live trading
+    const apiKey = currentSettings.binanceApiKey
+    const secret = currentSettings.binanceApiSecret
+    if (!apiKey || !secret) {
+      throw new Error('Live trading requires exchange API key and secret in settings')
+    }
+
+    const ticker = await fetchTicker(symbol)
+    const price = ticker.price
+    const cryptoQty = (amountUSDT * 0.999) / price // 0.1% fee buffer
+
+    console.log(`[agent] LIVE ${side.toUpperCase()}: ${symbol} — $${amountUSDT.toFixed(2)} (~${cryptoQty.toFixed(8)} @ $${price.toFixed(2)})`)
+    const order = await placeOrder(apiKey, secret, symbol, side, cryptoQty)
+    console.log(`[agent] LIVE order placed: ${order.id} — status: ${order.status}`)
+
+    // Shadow-track in paper portfolio so position state, stop-loss, and take-profit work
+    try {
+      const shadowTrade = await executePaperTrade(symbol, side, amountUSDT, model, reasoning)
+      result = { price: shadowTrade.price, quantity: shadowTrade.quantity, fee: shadowTrade.fee, pnl: shadowTrade.pnl }
+    } catch (shadowErr) {
+      console.warn('[agent] Paper shadow-track failed (live order was placed):', shadowErr)
+      result = { price, quantity: cryptoQty, fee: amountUSDT * 0.001, pnl: 0 }
+    }
   }
 
-  // Live trading
-  const apiKey = currentSettings.binanceApiKey
-  const secret = currentSettings.binanceApiSecret
-  if (!apiKey || !secret) {
-    throw new Error('Live trading requires exchange API key and secret in settings')
+  // Persist trade to Supabase
+  if (result) {
+    const updatedPortfolio = getPaperPortfolio()
+    const tradeRow: TradeRow = {
+      ts: new Date().toISOString(),
+      symbol,
+      side,
+      price: result.price ?? 0,
+      quantity: result.quantity ?? 0,
+      cost_usdt: amountUSDT,
+      fee: result.fee ?? 0,
+      pnl: result.pnl ?? 0,
+      model,
+      reasoning,
+      mode: agentState.mode,
+      paper: agentState.mode === 'paper',
+      balance_after: updatedPortfolio.balanceUSDT,
+    }
+    persistTrade(tradeRow).catch(() => {})
   }
 
-  const ticker = await fetchTicker(symbol)
-  const price = ticker.price
-  const cryptoQty = (amountUSDT * 0.999) / price // 0.1% fee buffer
-
-  console.log(`[agent] LIVE ${side.toUpperCase()}: ${symbol} — $${amountUSDT.toFixed(2)} (~${cryptoQty.toFixed(8)} @ $${price.toFixed(2)})`)
-  const order = await placeOrder(apiKey, secret, symbol, side, cryptoQty)
-  console.log(`[agent] LIVE order placed: ${order.id} — status: ${order.status}`)
-
-  // Shadow-track in paper portfolio so position state, stop-loss, and take-profit work
-  try {
-    await executePaperTrade(symbol, side, amountUSDT, model, reasoning)
-  } catch (shadowErr) {
-    console.warn('[agent] Paper shadow-track failed (live order was placed):', shadowErr)
-  }
-
-  return order
+  return result
 }
 
 async function runOneCycle(): Promise<AgentDecision | null> {
@@ -292,11 +332,16 @@ async function runOneCycle(): Promise<AgentDecision | null> {
       hasPosition, positionPnlPct, portfolio.balanceUSDT,
     )
 
+    // Build memory context from Supabase history
+    const memoryContext = await buildMemoryContext(symbol, agentState.activeModel)
+
     const adapterSettings = getAdapterSettings()
+    const cycleStart = Date.now()
     const response = await callModelWithTimeout(agentState.activeModel, [
       { role: 'system', content: TRADING_SYSTEM_PROMPT },
-      { role: 'user', content: marketContext },
+      { role: 'user', content: marketContext + memoryContext },
     ], adapterSettings)
+    const latencyMs = Date.now() - cycleStart
 
     let parsed: { action: 'buy' | 'sell' | 'hold'; confidence: number; reasoning: string }
     try {
@@ -365,12 +410,65 @@ async function runOneCycle(): Promise<AgentDecision | null> {
     consecutiveErrors = 0
 
     console.log(`[agent] Cycle #${agentState.cycleCount}: ${decision.action.toUpperCase()} (${decision.confidence}%) — ${decision.reasoning}`)
+
+    // --- Persist to Supabase ---
+    const updatedPortfolio = getPaperPortfolio()
+    const cycleRow: CycleRow = {
+      ts: new Date().toISOString(),
+      symbol,
+      model: agentState.activeModel,
+      mode: agentState.mode,
+      price: ticker.price,
+      change_24h: ticker.change24h,
+      indicators: flatIndicators(indicators),
+      raw_response: response.text.slice(0, 2000),
+      action: decision.action,
+      confidence: decision.confidence,
+      reasoning: decision.reasoning,
+      trade_executed: decision.action !== 'hold' && decision.confidence > 65,
+      trade_side: decision.action !== 'hold' ? decision.action : undefined,
+      trade_amount_usdt: decision.action === 'buy' ? Math.min(currentSettings.maxPositionUSDT, portfolio.balanceUSDT * 0.95) : undefined,
+      trade_price: ticker.price,
+      pnl_after: updatedPortfolio.totalPnl,
+      balance_after: updatedPortfolio.balanceUSDT,
+      latency_ms: latencyMs,
+    }
+    persistCycle(cycleRow).catch(() => {})
+
+    // Persist performance snapshot every 10 cycles
+    if (agentState.cycleCount % 10 === 0) {
+      const perfRow: PerformanceRow = {
+        ts: new Date().toISOString(),
+        symbol,
+        model: agentState.activeModel,
+        mode: agentState.mode,
+        balance_usdt: updatedPortfolio.balanceUSDT,
+        total_pnl: updatedPortfolio.totalPnl,
+        total_pnl_pct: updatedPortfolio.totalPnlPct,
+        win_rate: updatedPortfolio.winRate,
+        total_trades: updatedPortfolio.totalTrades,
+        wins: updatedPortfolio.wins,
+        losses: updatedPortfolio.losses,
+      }
+      persistPerformance(perfRow).catch(() => {})
+    }
+
     return decision
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[agent] Cycle error:', msg)
     agentState.error = msg
     consecutiveErrors++
+
+    // Persist error to Supabase
+    persistError({
+      ts: new Date().toISOString(),
+      symbol: agentState.symbol,
+      model: agentState.activeModel,
+      error_type: msg.includes('timeout') ? 'timeout' : msg.includes('parse') ? 'parse' : 'runtime',
+      error_message: msg,
+      cycle_count: agentState.cycleCount,
+    }).catch(() => {})
 
     // Auto-stop if too many consecutive errors
     if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {

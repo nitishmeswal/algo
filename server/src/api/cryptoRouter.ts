@@ -12,6 +12,13 @@ import {
   stopAgent,
   updateSettings,
 } from '../ai/tradingAgent.js'
+import {
+  getRecentCycles,
+  getRecentTrades,
+  getWinLossStats,
+  getTotalCycleCount,
+} from '../db/supabase/persistence.js'
+import { isSupabaseEnabled, checkTablesExist } from '../db/supabase/client.js'
 
 export const cryptoRouter = Router()
 
@@ -177,5 +184,90 @@ cryptoRouter.post('/settings', (req: Request, res: Response) => {
   } catch (err) {
     const status = err instanceof z.ZodError ? 400 : 500
     res.status(status).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+// ── Performance & History (Supabase) ─────────────────────────────────────────
+
+cryptoRouter.get('/metrics/:symbol', async (req: Request, res: Response) => {
+  try {
+    if (!isSupabaseEnabled()) {
+      res.json({ enabled: false, message: 'Supabase not configured — metrics unavailable' })
+      return
+    }
+    const symbol = validateSymbol(req.params.symbol as string)
+    const model = (req.query.model as string) || 'ollama'
+    const [stats, totalCycles, recentTrades, recentCycles] = await Promise.all([
+      getWinLossStats(symbol, model),
+      getTotalCycleCount(),
+      getRecentTrades(symbol, 20),
+      getRecentCycles(symbol, 20),
+    ])
+    res.json({
+      enabled: true,
+      symbol,
+      model,
+      totalCycles,
+      stats,
+      recentTrades,
+      recentCycles,
+    })
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+cryptoRouter.get('/history/trades', async (req: Request, res: Response) => {
+  try {
+    if (!isSupabaseEnabled()) {
+      res.json({ enabled: false, trades: [] })
+      return
+    }
+    const symbol = (req.query.symbol as string) || 'BTC/USDT'
+    const limit = Math.min(Number(req.query.limit) || 50, 200)
+    const trades = await getRecentTrades(symbol, limit)
+    res.json({ enabled: true, trades })
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+cryptoRouter.get('/history/cycles', async (req: Request, res: Response) => {
+  try {
+    if (!isSupabaseEnabled()) {
+      res.json({ enabled: false, cycles: [] })
+      return
+    }
+    const symbol = (req.query.symbol as string) || 'BTC/USDT'
+    const limit = Math.min(Number(req.query.limit) || 50, 200)
+    const cycles = await getRecentCycles(symbol, limit)
+    res.json({ enabled: true, cycles })
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+// ── Setup & Status ──────────────────────────────────────────────────────────
+
+cryptoRouter.get('/setup/status', async (_req: Request, res: Response) => {
+  try {
+    if (!isSupabaseEnabled()) {
+      res.json({
+        supabase: false,
+        message: 'Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to .env file',
+      })
+      return
+    }
+    const { allExist, missing } = await checkTablesExist()
+    res.json({
+      supabase: true,
+      tablesReady: allExist,
+      missingTables: missing,
+      setupInstructions: allExist
+        ? null
+        : 'Run the SQL from supabase/migrations/001_trading_tables.sql in your Supabase Dashboard SQL Editor',
+    })
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
   }
 })
