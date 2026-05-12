@@ -425,6 +425,7 @@ async function runOneCycle(): Promise<AgentDecision | null> {
 
     // Execute trade if confidence is high enough
     // Allow BUY even with existing position (scale in) as long as exposure limit not hit
+    let executedTradeAmount: number | undefined
     const maxTradeSize = computeMaxTradeSize(portfolio.balanceUSDT, positionCostUSDT, portfolio.balanceUSDT + positionCostUSDT)
     if (decision.action === 'buy' && decision.confidence > 65 && maxTradeSize >= 1) {
       const tradeAmount = Math.min(maxTradeSize, portfolio.balanceUSDT * 0.95)
@@ -432,6 +433,7 @@ async function runOneCycle(): Promise<AgentDecision | null> {
         const isScaleIn = hasPosition
         try {
           await executeTrade(symbol, 'buy', tradeAmount, agentState.activeModel, decision.reasoning, decision.confidence)
+          executedTradeAmount = tradeAmount
           if (isScaleIn) {
             console.log(`[agent] BUY (scale-in) — +$${tradeAmount.toFixed(2)} at $${ticker.price.toFixed(2)}`)
           } else {
@@ -453,6 +455,7 @@ async function runOneCycle(): Promise<AgentDecision | null> {
       try {
         const sellAmount = position!.quantity * ticker.price
         await executeTrade(symbol, 'sell', sellAmount, agentState.activeModel, decision.reasoning, decision.confidence)
+        executedTradeAmount = sellAmount
         console.log(`[agent] SELL executed at $${ticker.price.toFixed(2)}`)
       } catch (err) {
         console.error('[agent] Sell failed:', err)
@@ -490,7 +493,7 @@ async function runOneCycle(): Promise<AgentDecision | null> {
       reasoning: decision.reasoning,
       trade_executed: decision.action !== 'hold' && decision.confidence > 65,
       trade_side: decision.action !== 'hold' ? decision.action : undefined,
-      trade_amount_usdt: decision.action === 'buy' ? Math.min(currentSettings.maxPositionUSDT, portfolio.balanceUSDT * 0.95) : undefined,
+      trade_amount_usdt: executedTradeAmount,
       trade_price: ticker.price,
       pnl_after: updatedPortfolio.totalPnl,
       balance_after: updatedPortfolio.balanceUSDT,
@@ -587,7 +590,7 @@ export async function startAgent(
   // Auto-scale maxPositionUSDT based on portfolio balance
   const balance = initialBalance ?? getPaperPortfolio().balanceUSDT
   const autoMaxPosition = Math.max(5, Math.floor(balance * (MAX_POSITION_PCT / 100)))
-  if (currentSettings.maxPositionUSDT <= 5 || currentSettings.maxPositionUSDT < autoMaxPosition) {
+  if (currentSettings.maxPositionUSDT <= 5) {
     currentSettings.maxPositionUSDT = autoMaxPosition
     console.log(`[agent] Auto-scaled max position to $${autoMaxPosition} (${MAX_POSITION_PCT}% of $${balance})`)
   }
