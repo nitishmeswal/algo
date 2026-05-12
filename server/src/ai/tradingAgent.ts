@@ -348,6 +348,14 @@ async function runOneCycle(): Promise<AgentDecision | null> {
       parsed = parseDecisionJson(response.text)
     } catch {
       console.error('[agent] Failed to parse LLM response:', response.text.slice(0, 200))
+      persistError({
+        ts: new Date().toISOString(),
+        symbol,
+        model: agentState.activeModel,
+        error_type: 'parse',
+        error_message: `JSON parse failed: ${response.text.slice(0, 120)}`,
+        cycle_count: agentState.cycleCount,
+      }).catch(() => {})
       const decision: AgentDecision = {
         action: 'hold',
         confidence: 0,

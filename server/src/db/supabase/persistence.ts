@@ -83,7 +83,9 @@ export async function persistCycle(row: CycleRow): Promise<void> {
 
   const { error } = await sb.from('cycles').insert(row)
   if (error) {
-    console.warn('[supabase] Failed to persist cycle:', error.message)
+    console.warn('[supabase] ✗ cycle persist failed:', error.message)
+  } else {
+    console.log(`[supabase] ✓ cycle persisted — ${row.action.toUpperCase()} (${row.confidence}%) @ $${row.price.toFixed(2)} [${row.latency_ms ?? '?'}ms]`)
   }
 }
 
@@ -93,7 +95,9 @@ export async function persistTrade(row: TradeRow): Promise<void> {
 
   const { error } = await sb.from('trades').insert(row)
   if (error) {
-    console.warn('[supabase] Failed to persist trade:', error.message)
+    console.warn('[supabase] ✗ trade persist failed:', error.message)
+  } else {
+    console.log(`[supabase] ✓ trade persisted — ${row.side.toUpperCase()} ${row.symbol} @ $${row.price.toFixed(2)} | P&L: $${row.pnl.toFixed(4)} | balance: $${row.balance_after.toFixed(2)}`)
   }
 }
 
@@ -103,7 +107,9 @@ export async function persistPerformance(row: PerformanceRow): Promise<void> {
 
   const { error } = await sb.from('performance_snapshots').insert(row)
   if (error) {
-    console.warn('[supabase] Failed to persist performance:', error.message)
+    console.warn('[supabase] ✗ performance persist failed:', error.message)
+  } else {
+    console.log(`[supabase] ✓ performance snapshot — W/L: ${row.wins}/${row.losses} | WR: ${row.win_rate.toFixed(1)}% | PnL: $${row.total_pnl.toFixed(4)}`)
   }
 }
 
@@ -113,7 +119,9 @@ export async function persistError(row: ErrorRow): Promise<void> {
 
   const { error } = await sb.from('errors').insert(row)
   if (error) {
-    console.warn('[supabase] Failed to persist error:', error.message)
+    console.warn('[supabase] ✗ error persist failed:', error.message)
+  } else {
+    console.log(`[supabase] ✓ error persisted — ${row.error_type}: ${row.error_message.slice(0, 80)}`)
   }
 }
 
