@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express'
 import { z } from 'zod'
-import { aiModelSchema, tradingModeSchema } from '../../../shared/crypto/types.js'
+import { aiModelSchema, personalityIdSchema, tradingModeSchema } from '../../../shared/crypto/types.js'
 import { fetchCandles, fetchTicker, getDetectedExchangeName } from '../crypto/exchange.js'
 import { computeIndicators } from '../crypto/indicators.js'
 import { getPaperPortfolio, resetPaperPortfolio } from '../crypto/paperEngine.js'
@@ -11,7 +11,9 @@ import {
   startAgent,
   stopAgent,
   updateSettings,
+  getActivePersonality,
 } from '../ai/tradingAgent.js'
+import { getAllPresets } from '../ai/personalities.js'
 import {
   getRecentCycles,
   getRecentTrades,
@@ -21,6 +23,7 @@ import {
 import { isSupabaseEnabled, checkTablesExist } from '../db/supabase/client.js'
 import { getSessionHealth } from '../ai/sessionHealth.js'
 import { getValidationStats, getValidationHistory } from '../ai/signalValidator.js'
+import { getCalibrationStats } from '../ai/confidenceCalibrator.js'
 
 export const cryptoRouter = Router()
 
@@ -115,17 +118,42 @@ const startSchema = z.object({
   mode: tradingModeSchema.default('paper'),
   symbol: z.string().min(3).max(20).optional(),
   initialBalance: z.number().positive().max(1_000_000).optional(),
+  personality: personalityIdSchema.optional(),
 })
 
 cryptoRouter.post('/agent/start', async (req: Request, res: Response) => {
   try {
     const body = startSchema.parse(req.body)
-    const state = await startAgent(body.model, body.mode, body.symbol, body.initialBalance)
+    const state = await startAgent(body.model, body.mode, body.symbol, body.initialBalance, body.personality)
     res.json(state)
   } catch (err) {
     const status = err instanceof z.ZodError ? 400 : 500
     res.status(status).json({ error: err instanceof Error ? err.message : String(err) })
   }
+})
+
+// ── Personalities ───────────────────────────────────────────────────────────
+
+cryptoRouter.get('/personalities', (_req: Request, res: Response) => {
+  const presets = getAllPresets().map(p => ({
+    id: p.id,
+    name: p.name,
+    emoji: p.emoji,
+    description: p.description,
+    confidenceThreshold: p.confidenceThreshold,
+    maxPositionPct: p.maxPositionPct,
+    maxExposurePct: p.maxExposurePct,
+    stopLossPct: p.stopLossPct,
+    takeProfitPct: p.takeProfitPct,
+    positionSizeMultiplier: p.positionSizeMultiplier,
+    scaleInAggressiveness: p.scaleInAggressiveness,
+  }))
+  res.json({ personalities: presets })
+})
+
+cryptoRouter.get('/personality/active', (_req: Request, res: Response) => {
+  const p = getActivePersonality()
+  res.json({ active: p ? { id: p.id, name: p.name, emoji: p.emoji } : null })
 })
 
 cryptoRouter.post('/agent/stop', (_req: Request, res: Response) => {
@@ -262,6 +290,10 @@ cryptoRouter.get('/health', async (_req: Request, res: Response) => {
 
 cryptoRouter.get('/validation/stats', (_req: Request, res: Response) => {
   res.json(getValidationStats())
+})
+
+cryptoRouter.get('/calibration/stats', (_req: Request, res: Response) => {
+  res.json(getCalibrationStats())
 })
 
 cryptoRouter.get('/validation/history', async (req: Request, res: Response) => {

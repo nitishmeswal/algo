@@ -5,6 +5,7 @@ import type {
   Candle,
   CryptoSettings,
   IndicatorSnapshot,
+  PersonalityId,
   Portfolio,
   Ticker,
   TradingMode,
@@ -37,7 +38,7 @@ type CryptoStore = {
   fetchPortfolio: () => Promise<void>
   fetchAvailableModels: () => Promise<void>
   fetchSettings: () => Promise<void>
-  startAgent: (model: AiModel, mode: TradingMode, symbol?: string, balance?: number) => Promise<void>
+  startAgent: (model: AiModel, mode: TradingMode, symbol?: string, balance?: number, personality?: PersonalityId) => Promise<void>
   stopAgent: () => Promise<void>
   updateSettings: (patch: Partial<CryptoSettings>) => Promise<void>
   resetPortfolio: (balance: number) => Promise<void>
@@ -146,12 +147,12 @@ export const useCryptoStore = create<CryptoStore>((set) => ({
     }
   },
 
-  startAgent: async (model, mode, symbol, balance) => {
+  startAgent: async (model, mode, symbol, balance, personality) => {
     try {
       set({ loading: true, error: null })
       const agentState = await apiFetch<AgentState>('/crypto/agent/start', {
         method: 'POST',
-        body: JSON.stringify({ model, mode, symbol, initialBalance: balance }),
+        body: JSON.stringify({ model, mode, symbol, initialBalance: balance, personality }),
       })
       set({ agentState, portfolio: agentState.portfolio, loading: false })
     } catch (err) {

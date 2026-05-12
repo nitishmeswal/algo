@@ -4,6 +4,7 @@ import type {
   AiModel,
   CryptoSettings,
   IndicatorSnapshot,
+  PersonalityId,
   TradingMode,
 } from '../../../shared/crypto/types.js'
 import { fetchCandles, fetchTicker, placeOrder } from '../crypto/exchange.js'
@@ -28,11 +29,21 @@ import {
 import { isSupabaseEnabled } from '../db/supabase/client.js'
 import { registerTradeForValidation, checkPendingValidations } from './signalValidator.js'
 import { markSessionStart, recordCycleSuccess, recordCycleError } from './sessionHealth.js'
+import { getPersonalityPreset, buildPersonalitySystemPrompt, type PersonalityPreset } from './personalities.js'
+import {
+  recordSignal,
+  recordOutcome,
+  calibrateConfidence,
+  buildCalibrationContext,
+  getCalibrationStats,
+  resetCalibration,
+} from './confidenceCalibrator.js'
 
 const LLM_TIMEOUT_MS = 30_000
 const MAX_CONSECUTIVE_ERRORS = 5
 
-const TRADING_SYSTEM_PROMPT = `You are an expert cryptocurrency trading AI agent with memory of past performance. You analyze technical indicators, market context, and your own trade history to make decisions.
+// Default system prompt (used when no personality is selected)
+const DEFAULT_SYSTEM_PROMPT = `You are an expert cryptocurrency trading AI agent with memory of past performance. You analyze technical indicators, market context, and your own trade history to make decisions.
 
 RULES:
 1. You MUST respond with EXACTLY one JSON object — no markdown, no explanation outside the JSON.
@@ -51,6 +62,8 @@ RULES:
 14. If already holding and position is profitable, consider adding more. If position is losing, be cautious about adding.
 
 You are managing a trading portfolio. Every dollar counts. Be precise and adaptive.`
+
+let activePersonality: PersonalityPreset | null = null
 
 const agentState: AgentState = {
   status: 'idle',
@@ -79,9 +92,33 @@ let currentSettings: CryptoSettings = {
   nightMode: false,
 }
 
-// Max percentage of total balance that can be in a single position
-const MAX_POSITION_PCT = 50 // 50% of balance per position
-const MAX_TOTAL_EXPOSURE_PCT = 80 // 80% of balance total exposure
+// Default risk limits (overridden by personality)
+const DEFAULT_MAX_POSITION_PCT = 50
+const DEFAULT_MAX_EXPOSURE_PCT = 80
+
+function getEffectivePositionPct(): number {
+  return activePersonality?.maxPositionPct ?? DEFAULT_MAX_POSITION_PCT
+}
+
+function getEffectiveExposurePct(): number {
+  return activePersonality?.maxExposurePct ?? DEFAULT_MAX_EXPOSURE_PCT
+}
+
+function getEffectiveConfidenceThreshold(): number {
+  return activePersonality?.confidenceThreshold ?? 65
+}
+
+function getEffectiveStopLossPct(): number {
+  return activePersonality?.stopLossPct ?? currentSettings.stopLossPct
+}
+
+function getEffectiveTakeProfitPct(): number {
+  return activePersonality?.takeProfitPct ?? currentSettings.takeProfitPct
+}
+
+export function getActivePersonality(): PersonalityPreset | null {
+  return activePersonality
+}
 
 export function getAgentState(): AgentState {
   agentState.portfolio = getPaperPortfolio()
@@ -169,8 +206,8 @@ PORTFOLIO:
 - Available cash: $${balanceUSDT.toFixed(2)}
 - Currently holding: ${hasPosition ? 'YES' : 'NO'}${hasPosition ? `\n- Position cost: $${positionCostUSDT.toFixed(2)}` : ''}${hasPosition ? `\n- Position P&L: ${positionPnlPct.toFixed(2)}%` : ''}${hasPosition ? `\n- Current exposure: ${exposurePct.toFixed(0)}% of portfolio` : ''}
 - Max trade size available: $${maxTradeSize.toFixed(2)}
-- Stop loss: -${currentSettings.stopLossPct}%
-- Take profit: +${currentSettings.takeProfitPct}%
+- Stop loss: -${getEffectiveStopLossPct()}%
+- Take profit: +${getEffectiveTakeProfitPct()}%
 ${hasPosition ? '- You CAN add to position if signals are strong (scale in).' : ''}
 Provide your trading decision now.`
 }
@@ -180,11 +217,14 @@ function computeMaxTradeSize(
   currentExposure: number,
   totalPortfolioValue: number,
 ): number {
-  // Limit: max single trade = maxPositionUSDT or MAX_POSITION_PCT of portfolio
-  const maxFromSettings = currentSettings.maxPositionUSDT
-  const maxFromPortfolioPct = totalPortfolioValue * (MAX_POSITION_PCT / 100)
-  const maxFromExposureLimit = totalPortfolioValue * (MAX_TOTAL_EXPOSURE_PCT / 100) - currentExposure
-  const maxFromBalance = balanceUSDT * 0.95 // keep 5% cash buffer
+  const positionPct = getEffectivePositionPct()
+  const exposurePct = getEffectiveExposurePct()
+  const sizeMultiplier = activePersonality?.positionSizeMultiplier ?? 1.0
+
+  const maxFromSettings = currentSettings.maxPositionUSDT * sizeMultiplier
+  const maxFromPortfolioPct = totalPortfolioValue * (positionPct / 100)
+  const maxFromExposureLimit = totalPortfolioValue * (exposurePct / 100) - currentExposure
+  const maxFromBalance = balanceUSDT * 0.95
 
   return Math.max(0, Math.min(maxFromSettings, maxFromPortfolioPct, maxFromExposureLimit, maxFromBalance))
 }
@@ -285,14 +325,16 @@ async function executeTrade(
       mode: agentState.mode,
       paper: agentState.mode === 'paper',
       balance_after: updatedPortfolio.balanceUSDT,
+      personality: activePersonality?.id,
     }
     persistTrade(tradeRow).catch(() => {})
 
-    // Register for signal validation
+    // Register for signal validation + confidence calibration
     registerTradeForValidation(
       tradeRow.ts, symbol, model, side,
       result.price ?? 0, confidence, reasoning, agentState.cycleCount,
     )
+    recordSignal(side, confidence)
   }
 
   return result
@@ -324,7 +366,7 @@ async function runOneCycle(): Promise<AgentDecision | null> {
 
     // Check stop-loss / take-profit
     if (hasPosition && position) {
-      if (positionPnlPct <= -currentSettings.stopLossPct) {
+      if (positionPnlPct <= -getEffectiveStopLossPct()) {
         const sellAmount = position.quantity * ticker.price
         await executeTrade(
           symbol, 'sell', sellAmount, agentState.activeModel, `Stop-loss triggered at ${positionPnlPct.toFixed(2)}%`, 95,
@@ -332,7 +374,7 @@ async function runOneCycle(): Promise<AgentDecision | null> {
         const decision: AgentDecision = {
           action: 'sell',
           confidence: 95,
-          reasoning: `Stop-loss triggered: P&L ${positionPnlPct.toFixed(2)}% exceeded -${currentSettings.stopLossPct}% threshold`,
+          reasoning: `Stop-loss triggered: P&L ${positionPnlPct.toFixed(2)}% exceeded -${getEffectiveStopLossPct()}% threshold`,
           model: agentState.activeModel,
           indicators: flatIndicators(indicators),
           ts: Date.now(),
@@ -344,7 +386,7 @@ async function runOneCycle(): Promise<AgentDecision | null> {
         consecutiveErrors = 0
         return decision
       }
-      if (positionPnlPct >= currentSettings.takeProfitPct) {
+      if (positionPnlPct >= getEffectiveTakeProfitPct()) {
         const sellAmount = position.quantity * ticker.price
         await executeTrade(
           symbol, 'sell', sellAmount, agentState.activeModel, `Take-profit triggered at ${positionPnlPct.toFixed(2)}%`, 95,
@@ -352,7 +394,7 @@ async function runOneCycle(): Promise<AgentDecision | null> {
         const decision: AgentDecision = {
           action: 'sell',
           confidence: 95,
-          reasoning: `Take-profit triggered: P&L ${positionPnlPct.toFixed(2)}% exceeded +${currentSettings.takeProfitPct}% threshold`,
+          reasoning: `Take-profit triggered: P&L ${positionPnlPct.toFixed(2)}% exceeded +${getEffectiveTakeProfitPct()}% threshold`,
           model: agentState.activeModel,
           indicators: flatIndicators(indicators),
           ts: Date.now(),
@@ -379,11 +421,18 @@ async function runOneCycle(): Promise<AgentDecision | null> {
     // Build memory context from Supabase history
     const memoryContext = await buildMemoryContext(symbol, agentState.activeModel)
 
+    // Build confidence calibration context
+    const calibrationContext = buildCalibrationContext()
+
+    const systemPrompt = activePersonality
+      ? buildPersonalitySystemPrompt(activePersonality)
+      : DEFAULT_SYSTEM_PROMPT
+
     const adapterSettings = getAdapterSettings()
     const cycleStart = Date.now()
     const response = await callModelWithTimeout(agentState.activeModel, [
-      { role: 'system', content: TRADING_SYSTEM_PROMPT },
-      { role: 'user', content: marketContext + memoryContext },
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: marketContext + memoryContext + calibrationContext },
     ], adapterSettings)
     const latencyMs = Date.now() - cycleStart
 
@@ -414,20 +463,30 @@ async function runOneCycle(): Promise<AgentDecision | null> {
       return decision
     }
 
+    // Apply confidence calibration — adjust raw LLM confidence based on historical accuracy
+    const rawConfidence = parsed.confidence
+    const calibratedConfidence = calibrateConfidence(
+      rawConfidence,
+      activePersonality?.confidenceDecayRate,
+    )
+    if (rawConfidence !== calibratedConfidence) {
+      console.log(`[calibrator] Confidence: ${rawConfidence}% → ${calibratedConfidence}% (calibration offset applied)`)
+    }
+
     const decision: AgentDecision = {
       action: parsed.action,
-      confidence: parsed.confidence,
+      confidence: calibratedConfidence,
       reasoning: parsed.reasoning,
       model: agentState.activeModel,
       indicators: flatIndicators(indicators),
       ts: Date.now(),
     }
 
-    // Execute trade if confidence is high enough
-    // Allow BUY even with existing position (scale in) as long as exposure limit not hit
+    // Execute trade if confidence exceeds personality threshold
+    const confidenceThreshold = getEffectiveConfidenceThreshold()
     let executedTradeAmount: number | undefined
     const maxTradeSize = computeMaxTradeSize(portfolio.balanceUSDT, positionCostUSDT, portfolio.balanceUSDT + positionCostUSDT)
-    if (decision.action === 'buy' && decision.confidence > 65 && maxTradeSize >= 1) {
+    if (decision.action === 'buy' && decision.confidence > confidenceThreshold && maxTradeSize >= 1) {
       const tradeAmount = Math.min(maxTradeSize, portfolio.balanceUSDT * 0.95)
       if (tradeAmount >= 1) {
         const isScaleIn = hasPosition
@@ -448,10 +507,10 @@ async function runOneCycle(): Promise<AgentDecision | null> {
         decision.action = 'hold'
         decision.reasoning += ' (insufficient balance for min trade)'
       }
-    } else if (decision.action === 'buy' && decision.confidence > 65 && maxTradeSize < 1) {
+    } else if (decision.action === 'buy' && decision.confidence > confidenceThreshold && maxTradeSize < 1) {
       decision.action = 'hold'
       decision.reasoning += ' (max exposure reached — cannot add more)'
-    } else if (decision.action === 'sell' && decision.confidence > 65 && hasPosition) {
+    } else if (decision.action === 'sell' && decision.confidence > confidenceThreshold && hasPosition) {
       try {
         const sellAmount = position!.quantity * ticker.price
         await executeTrade(symbol, 'sell', sellAmount, agentState.activeModel, decision.reasoning, decision.confidence)
@@ -498,6 +557,7 @@ async function runOneCycle(): Promise<AgentDecision | null> {
       pnl_after: updatedPortfolio.totalPnl,
       balance_after: updatedPortfolio.balanceUSDT,
       latency_ms: latencyMs,
+      personality: activePersonality?.id,
     }
     persistCycle(cycleRow).catch(() => {})
 
@@ -566,6 +626,7 @@ export async function startAgent(
   mode: TradingMode,
   symbol?: string,
   initialBalance?: number,
+  personality?: PersonalityId,
 ): Promise<AgentState> {
   if (agentState.status === 'running') {
     return getAgentState()
@@ -583,31 +644,43 @@ export async function startAgent(
     }
   }
 
+  // Set personality
+  if (personality) {
+    activePersonality = getPersonalityPreset(personality)
+    console.log(`[agent] Personality: ${activePersonality.emoji} ${activePersonality.name} — ${activePersonality.description}`)
+  } else {
+    activePersonality = null
+  }
+
   if (mode === 'paper' && initialBalance) {
     resetPaperPortfolio(initialBalance)
   }
 
   // Auto-scale maxPositionUSDT based on portfolio balance
+  const effectivePositionPct = getEffectivePositionPct()
   const balance = initialBalance ?? getPaperPortfolio().balanceUSDT
-  const autoMaxPosition = Math.max(5, Math.floor(balance * (MAX_POSITION_PCT / 100)))
+  const autoMaxPosition = Math.max(5, Math.floor(balance * (effectivePositionPct / 100)))
   if (currentSettings.maxPositionUSDT <= 5) {
     currentSettings.maxPositionUSDT = autoMaxPosition
-    console.log(`[agent] Auto-scaled max position to $${autoMaxPosition} (${MAX_POSITION_PCT}% of $${balance})`)
+    console.log(`[agent] Auto-scaled max position to $${autoMaxPosition} (${effectivePositionPct}% of $${balance})`)
   }
 
   agentState.status = 'running'
   agentState.activeModel = model
   agentState.mode = mode
+  agentState.personality = personality
   agentState.error = null
   agentState.startedAt = Date.now()
   agentState.cycleCount = 0
   agentState.decisionHistory = []
   consecutiveErrors = 0
+  resetCalibration()
   markSessionStart()
   if (symbol) agentState.symbol = symbol
   agentState.portfolio = getPaperPortfolio()
 
-  console.log(`[agent] Started — model=${model}, mode=${mode}, symbol=${agentState.symbol}`)
+  const personalityLabel = activePersonality ? ` personality=${activePersonality.name}` : ''
+  console.log(`[agent] Started — model=${model}, mode=${mode}, symbol=${agentState.symbol}${personalityLabel}`)
 
   // Run first cycle immediately
   await runOneCycle()

@@ -68,6 +68,29 @@ export const portfolioSchema = z.object({
 })
 export type Portfolio = z.infer<typeof portfolioSchema>
 
+// ── Agent Personality ────────────────────────────────────────────────────────
+export const personalityIdSchema = z.enum(['guardian', 'hunter', 'sniper', 'monk', 'maverick'])
+export type PersonalityId = z.infer<typeof personalityIdSchema>
+
+export const agentInstanceSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  personality: personalityIdSchema,
+  allocatedCapital: z.number(),
+  status: z.enum(['idle', 'running', 'paused', 'error']),
+  cycleCount: z.number(),
+  totalPnl: z.number(),
+  winRate: z.number(),
+  totalTrades: z.number(),
+  lastDecision: z.object({
+    action: z.enum(['buy', 'sell', 'hold']),
+    confidence: z.number(),
+    reasoning: z.string(),
+    ts: z.number(),
+  }).nullable(),
+})
+export type AgentInstance = z.infer<typeof agentInstanceSchema>
+
 // ── Agent state ─────────────────────────────────────────────────────────────
 export const agentStatusSchema = z.enum(['idle', 'running', 'paused', 'error'])
 export type AgentStatus = z.infer<typeof agentStatusSchema>
@@ -92,6 +115,7 @@ export const agentStateSchema = z.object({
   status: agentStatusSchema,
   mode: tradingModeSchema,
   activeModel: aiModelSchema,
+  personality: personalityIdSchema.optional(),
   symbol: z.string(),
   interval: z.string(),
   portfolio: portfolioSchema,
@@ -100,6 +124,7 @@ export const agentStateSchema = z.object({
   error: z.string().nullable(),
   cycleCount: z.number(),
   startedAt: z.number().nullable(),
+  agents: z.array(agentInstanceSchema).optional(),
 })
 export type AgentState = z.infer<typeof agentStateSchema>
 

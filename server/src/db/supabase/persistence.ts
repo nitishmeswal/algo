@@ -25,6 +25,7 @@ export interface CycleRow {
   balance_after?: number
   error?: string
   latency_ms?: number
+  personality?: string
 }
 
 export interface TradeRow {
@@ -43,6 +44,7 @@ export interface TradeRow {
   paper: boolean
   balance_after: number
   indicators_at_trade?: Record<string, number | null>
+  personality?: string
 }
 
 export interface PerformanceRow {
