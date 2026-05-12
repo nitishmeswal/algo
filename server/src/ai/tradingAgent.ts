@@ -42,12 +42,13 @@ RULES:
 5. For SELL: look for overbought RSI (>70), price near upper Bollinger, bearish MACD crossover, take profit or stop loss.
 6. For HOLD: when signals are mixed, uncertainty is high, or confidence is below threshold.
 7. Never risk more than the allocated budget on a single trade.
-8. Consider the current position — don't buy if already holding, suggest sell if profit target hit.
+8. You CAN add to an existing position (scale in) if signals strengthen. Use position_size_pct to control how much more to buy.
 9. Factor in 24h price change and volume trends.
 10. Keep reasoning under 200 characters.
 11. LEARN from your performance history — if recent trades lost money, be more selective.
 12. Use position_size_pct to size trades dynamically (50=half of max, 100=full max position).
 13. Adjust stop_loss_pct and take_profit_pct based on volatility (ATR) — wider in volatile markets.
+14. If already holding and position is profitable, consider adding more. If position is losing, be cautious about adding.
 
 You are managing a trading portfolio. Every dollar counts. Be precise and adaptive.`
 
@@ -77,6 +78,10 @@ let currentSettings: CryptoSettings = {
   symbol: 'BTC/USDT',
   nightMode: false,
 }
+
+// Max percentage of total balance that can be in a single position
+const MAX_POSITION_PCT = 50 // 50% of balance per position
+const MAX_TOTAL_EXPOSURE_PCT = 80 // 80% of balance total exposure
 
 export function getAgentState(): AgentState {
   agentState.portfolio = getPaperPortfolio()
@@ -137,7 +142,12 @@ function buildMarketContext(
   hasPosition: boolean,
   positionPnlPct: number,
   balanceUSDT: number,
+  positionCostUSDT: number,
 ): string {
+  const totalBalance = balanceUSDT + positionCostUSDT
+  const exposurePct = totalBalance > 0 ? (positionCostUSDT / totalBalance) * 100 : 0
+  const maxTradeSize = computeMaxTradeSize(balanceUSDT, positionCostUSDT, totalBalance)
+
   return `MARKET DATA for ${symbol}:
 - Current price: $${price.toFixed(2)}
 - 24h change: ${change24h.toFixed(2)}%
@@ -155,13 +165,28 @@ function buildMarketContext(
 - Volume vs avg: ${indicators.currentVolume && indicators.volumeSma20 ? ((indicators.currentVolume / indicators.volumeSma20) * 100).toFixed(0) + '%' : 'N/A'}
 
 PORTFOLIO:
-- Available balance: $${balanceUSDT.toFixed(2)}
-- Currently holding: ${hasPosition ? 'YES' : 'NO'}${hasPosition ? `\n- Position P&L: ${positionPnlPct.toFixed(2)}%` : ''}
+- Total portfolio value: $${totalBalance.toFixed(2)}
+- Available cash: $${balanceUSDT.toFixed(2)}
+- Currently holding: ${hasPosition ? 'YES' : 'NO'}${hasPosition ? `\n- Position cost: $${positionCostUSDT.toFixed(2)}` : ''}${hasPosition ? `\n- Position P&L: ${positionPnlPct.toFixed(2)}%` : ''}${hasPosition ? `\n- Current exposure: ${exposurePct.toFixed(0)}% of portfolio` : ''}
+- Max trade size available: $${maxTradeSize.toFixed(2)}
 - Stop loss: -${currentSettings.stopLossPct}%
 - Take profit: +${currentSettings.takeProfitPct}%
-- Max position size: $${currentSettings.maxPositionUSDT}
-
+${hasPosition ? '- You CAN add to position if signals are strong (scale in).' : ''}
 Provide your trading decision now.`
+}
+
+function computeMaxTradeSize(
+  balanceUSDT: number,
+  currentExposure: number,
+  totalPortfolioValue: number,
+): number {
+  // Limit: max single trade = maxPositionUSDT or MAX_POSITION_PCT of portfolio
+  const maxFromSettings = currentSettings.maxPositionUSDT
+  const maxFromPortfolioPct = totalPortfolioValue * (MAX_POSITION_PCT / 100)
+  const maxFromExposureLimit = totalPortfolioValue * (MAX_TOTAL_EXPOSURE_PCT / 100) - currentExposure
+  const maxFromBalance = balanceUSDT * 0.95 // keep 5% cash buffer
+
+  return Math.max(0, Math.min(maxFromSettings, maxFromPortfolioPct, maxFromExposureLimit, maxFromBalance))
 }
 
 function callModelWithTimeout(
@@ -341,9 +366,14 @@ async function runOneCycle(): Promise<AgentDecision | null> {
       }
     }
 
+    // Calculate current position exposure
+    const positionCostUSDT = hasPosition && position
+      ? position.quantity * position.avgEntryPrice
+      : 0
+
     const marketContext = buildMarketContext(
       symbol, ticker.price, ticker.change24h, indicators,
-      hasPosition, positionPnlPct, portfolio.balanceUSDT,
+      hasPosition, positionPnlPct, portfolio.balanceUSDT, positionCostUSDT,
     )
 
     // Build memory context from Supabase history
@@ -394,12 +424,19 @@ async function runOneCycle(): Promise<AgentDecision | null> {
     }
 
     // Execute trade if confidence is high enough
-    if (decision.action === 'buy' && decision.confidence > 65 && !hasPosition) {
-      const tradeAmount = Math.min(currentSettings.maxPositionUSDT, portfolio.balanceUSDT * 0.95)
+    // Allow BUY even with existing position (scale in) as long as exposure limit not hit
+    const maxTradeSize = computeMaxTradeSize(portfolio.balanceUSDT, positionCostUSDT, portfolio.balanceUSDT + positionCostUSDT)
+    if (decision.action === 'buy' && decision.confidence > 65 && maxTradeSize >= 1) {
+      const tradeAmount = Math.min(maxTradeSize, portfolio.balanceUSDT * 0.95)
       if (tradeAmount >= 1) {
+        const isScaleIn = hasPosition
         try {
           await executeTrade(symbol, 'buy', tradeAmount, agentState.activeModel, decision.reasoning, decision.confidence)
-          console.log(`[agent] BUY executed — $${tradeAmount.toFixed(2)} at $${ticker.price.toFixed(2)}`)
+          if (isScaleIn) {
+            console.log(`[agent] BUY (scale-in) — +$${tradeAmount.toFixed(2)} at $${ticker.price.toFixed(2)}`)
+          } else {
+            console.log(`[agent] BUY executed — $${tradeAmount.toFixed(2)} at $${ticker.price.toFixed(2)}`)
+          }
         } catch (err) {
           console.error('[agent] Buy failed:', err)
           decision.action = 'hold'
@@ -409,6 +446,9 @@ async function runOneCycle(): Promise<AgentDecision | null> {
         decision.action = 'hold'
         decision.reasoning += ' (insufficient balance for min trade)'
       }
+    } else if (decision.action === 'buy' && decision.confidence > 65 && maxTradeSize < 1) {
+      decision.action = 'hold'
+      decision.reasoning += ' (max exposure reached — cannot add more)'
     } else if (decision.action === 'sell' && decision.confidence > 65 && hasPosition) {
       try {
         const sellAmount = position!.quantity * ticker.price
@@ -542,6 +582,14 @@ export async function startAgent(
 
   if (mode === 'paper' && initialBalance) {
     resetPaperPortfolio(initialBalance)
+  }
+
+  // Auto-scale maxPositionUSDT based on portfolio balance
+  const balance = initialBalance ?? getPaperPortfolio().balanceUSDT
+  const autoMaxPosition = Math.max(5, Math.floor(balance * (MAX_POSITION_PCT / 100)))
+  if (currentSettings.maxPositionUSDT <= 5 || currentSettings.maxPositionUSDT < autoMaxPosition) {
+    currentSettings.maxPositionUSDT = autoMaxPosition
+    console.log(`[agent] Auto-scaled max position to $${autoMaxPosition} (${MAX_POSITION_PCT}% of $${balance})`)
   }
 
   agentState.status = 'running'
