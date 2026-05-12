@@ -149,29 +149,26 @@ export default function CryptoAgentPage() {
 
       {store.error && (
         <Alert
-          type={store.error.includes('Cannot connect') || store.error.includes('not found') ? 'warning' : 'error'}
+          type={store.error.includes('Cannot connect') || store.error.startsWith('Backend server not found') ? 'warning' : 'error'}
           message={
-            store.error.includes('Cannot connect') || store.error.includes('not found')
+            store.error.includes('Cannot connect') || store.error.startsWith('Backend server not found')
               ? 'Backend Server Not Running'
               : 'Error'
           }
           description={
-            store.error.includes('Cannot connect') || store.error.includes('not found')
+            store.error.includes('Cannot connect') || store.error.startsWith('Backend server not found')
               ? (
                 <div>
                   <p style={{ margin: '4px 0' }}>{store.error}</p>
                   <p style={{ margin: '4px 0', color: '#888' }}>
-                    The agent page requires the backend server. Open a terminal and run:
+                    Run the app locally with a single command:
                   </p>
                   <code style={{ display: 'block', background: '#1a1a2e', padding: '8px 12px', borderRadius: 4, margin: '8px 0', color: '#10b981' }}>
-                    cd server && npm install && npm run dev
+                    npm start
                   </code>
                   <p style={{ margin: '4px 0', color: '#888' }}>
-                    Then open another terminal for the frontend:
+                    Then open <strong>http://localhost:8000/agent</strong>
                   </p>
-                  <code style={{ display: 'block', background: '#1a1a2e', padding: '8px 12px', borderRadius: 4, margin: '8px 0', color: '#10b981' }}>
-                    npm run dev
-                  </code>
                 </div>
               )
               : store.error

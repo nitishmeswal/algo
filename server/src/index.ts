@@ -1,5 +1,8 @@
 import './env/bootstrap.js'
+import fs from 'node:fs'
 import http from 'node:http'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import express from 'express'
 
@@ -9,6 +12,8 @@ import { nlpRouter } from './api/nlpRouter.js'
 import { ordersRouter } from './api/ordersRouter.js'
 import { attachBlotterStream, WS_PATH } from './realtime/blotterStream.js'
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const DIST_DIR = path.resolve(__dirname, '../../dist')
 const PORT = Number(process.env.PORT) || 8000
 
 const app = express()
@@ -33,6 +38,14 @@ app.use('/orders', ordersRouter)
 app.use('/nlp', nlpRouter)
 app.use('/crypto', cryptoRouter)
 
+// Serve built frontend if dist/ exists (monolith mode)
+if (fs.existsSync(DIST_DIR)) {
+  app.use(express.static(DIST_DIR))
+  app.get('{*path}', (_req, res) => {
+    res.sendFile(path.join(DIST_DIR, 'index.html'))
+  })
+}
+
 app.use(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Express error arity
   (err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -45,22 +58,17 @@ const server = http.createServer(app)
 attachBlotterStream(server)
 
 server.listen(PORT, () => {
-  console.log(`FlowDesk stream server http://localhost:${PORT}`)
-  console.log(`  GET  http://localhost:${PORT}/health`)
-  console.log(`  GET  http://localhost:${PORT}/orders`)
-  console.log(`  POST http://localhost:${PORT}/orders`)
-  console.log(`  GET  http://localhost:${PORT}/orders/:id`)
-  console.log(`  GET  http://localhost:${PORT}/audit`)
-  console.log(`  GET  http://localhost:${PORT}/orders/:id/audit`)
-  console.log(`  POST http://localhost:${PORT}/nlp/parse-order-filter`)
-  console.log(`  POST http://localhost:${PORT}/nlp/breach-insight`)
-  console.log(`  POST http://localhost:${PORT}/nlp/trade-booking`)
-  console.log(`  POST http://localhost:${PORT}/nlp/trade-booking/stream`)
-  console.log(`  GET  http://localhost:${PORT}/nlp/trade-booking/history`)
-  console.log(`  GET  http://localhost:${PORT}/crypto/price/:symbol`)
-  console.log(`  GET  http://localhost:${PORT}/crypto/candles/:symbol`)
-  console.log(`  GET  http://localhost:${PORT}/crypto/agent/state`)
-  console.log(`  POST http://localhost:${PORT}/crypto/agent/start`)
-  console.log(`  POST http://localhost:${PORT}/crypto/agent/stop`)
+  const hasFrontend = fs.existsSync(DIST_DIR)
+  console.log(`AlgoTrader AI server http://localhost:${PORT}`)
+  if (hasFrontend) {
+    console.log(`  UI   http://localhost:${PORT}/        (frontend)`)
+    console.log(`  UI   http://localhost:${PORT}/agent   (trading agent)`)
+  } else {
+    console.log(`  [!]  Frontend not built. Run "npm run build" first, or use "npm start" from the project root.`)
+  }
+  console.log(`  API  http://localhost:${PORT}/crypto/price/:symbol`)
+  console.log(`  API  http://localhost:${PORT}/crypto/agent/state`)
+  console.log(`  API  http://localhost:${PORT}/crypto/agent/start`)
+  console.log(`  API  http://localhost:${PORT}/crypto/agent/stop`)
   console.log(`  WS   ws://localhost:${PORT}${WS_PATH}`)
 })
