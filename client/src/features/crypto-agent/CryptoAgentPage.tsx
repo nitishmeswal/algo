@@ -32,7 +32,7 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import type { AgentDecision, AiModel, Candle, IndicatorSnapshot, TradeRecord, TradingMode } from '../../../../shared/crypto/types'
+import type { AgentDecision, AiModel, Candle, IndicatorSnapshot, PersonalityId, TradeRecord, TradingMode } from '../../../../shared/crypto/types'
 import { useCryptoStore } from './useCryptoStore'
 
 const MODEL_LABELS: Record<AiModel, string> = {
@@ -62,6 +62,7 @@ export default function CryptoAgentPage() {
   const [selectedMode, setSelectedMode] = useState<TradingMode>('paper')
   const [selectedSymbol, setSelectedSymbol] = useState('BTC/USDT')
   const [initialBalance, setInitialBalance] = useState(10)
+  const [selectedPersonality, setSelectedPersonality] = useState<PersonalityId | undefined>(undefined)
 
   // Initial load
   useEffect(() => {
@@ -103,8 +104,8 @@ export default function CryptoAgentPage() {
       )
       if (!confirmed) return
     }
-    await store.startAgent(selectedModel, selectedMode, selectedSymbol, initialBalance)
-  }, [store, selectedModel, selectedMode, selectedSymbol, initialBalance])
+    await store.startAgent(selectedModel, selectedMode, selectedSymbol, initialBalance, selectedPersonality)
+  }, [store, selectedModel, selectedMode, selectedSymbol, initialBalance, selectedPersonality])
 
   const handleStop = useCallback(async () => {
     await store.stopAgent()
@@ -187,6 +188,64 @@ export default function CryptoAgentPage() {
         />
       )}
 
+      {/* Personality Picker */}
+      <Card
+        size="small"
+        title={<span style={{ color: '#fff' }}>Agent Personality</span>}
+        style={{ marginBottom: 16, background: '#111118', border: '1px solid #1f1f2e' }}
+      >
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+          <div
+            onClick={() => !isRunning && setSelectedPersonality(undefined)}
+            style={{
+              padding: '10px 16px', borderRadius: 8, cursor: isRunning ? 'default' : 'pointer',
+              border: selectedPersonality === undefined ? '2px solid #10b981' : '1px solid #2a2a3e',
+              background: selectedPersonality === undefined ? '#0d2818' : '#1a1a2e',
+              textAlign: 'center', minWidth: 100, opacity: isRunning ? 0.6 : 1,
+            }}
+          >
+            <div style={{ fontSize: 20, marginBottom: 2 }}>🤖</div>
+            <div style={{ color: '#fff', fontWeight: 600, fontSize: 13 }}>Default</div>
+            <div style={{ color: '#888', fontSize: 10, marginTop: 2 }}>Balanced, no preset</div>
+          </div>
+          {([
+            { id: 'guardian' as PersonalityId, emoji: '🛡️', name: 'Guardian', desc: 'Conservative', color: '#3b82f6' },
+            { id: 'hunter' as PersonalityId, emoji: '🏹', name: 'Hunter', desc: 'Aggressive', color: '#f59e0b' },
+            { id: 'sniper' as PersonalityId, emoji: '🎯', name: 'Sniper', desc: 'Precision', color: '#8b5cf6' },
+            { id: 'monk' as PersonalityId, emoji: '🧘', name: 'Monk', desc: 'Patient swing', color: '#06b6d4' },
+            { id: 'maverick' as PersonalityId, emoji: '🎲', name: 'Maverick', desc: 'High-risk', color: '#ef4444' },
+          ]).map(p => (
+            <div
+              key={p.id}
+              onClick={() => !isRunning && setSelectedPersonality(p.id)}
+              style={{
+                padding: '10px 16px', borderRadius: 8, cursor: isRunning ? 'default' : 'pointer',
+                border: selectedPersonality === p.id ? `2px solid ${p.color}` : '1px solid #2a2a3e',
+                background: selectedPersonality === p.id ? `${p.color}15` : '#1a1a2e',
+                textAlign: 'center', minWidth: 100, opacity: isRunning ? 0.6 : 1,
+                transition: 'all 0.2s',
+              }}
+            >
+              <div style={{ fontSize: 20, marginBottom: 2 }}>{p.emoji}</div>
+              <div style={{ color: '#fff', fontWeight: 600, fontSize: 13 }}>{p.name}</div>
+              <div style={{ color: '#888', fontSize: 10, marginTop: 2 }}>{p.desc}</div>
+            </div>
+          ))}
+        </div>
+        {selectedPersonality && (
+          <div style={{ textAlign: 'center', marginTop: 8 }}>
+            <Tag color={
+              selectedPersonality === 'guardian' ? 'blue' :
+              selectedPersonality === 'hunter' ? 'gold' :
+              selectedPersonality === 'sniper' ? 'purple' :
+              selectedPersonality === 'monk' ? 'cyan' : 'red'
+            }>
+              Active: {selectedPersonality.charAt(0).toUpperCase() + selectedPersonality.slice(1)}
+            </Tag>
+          </div>
+        )}
+      </Card>
+
       {/* Big Start/Stop Button */}
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
         <style>{`
@@ -223,7 +282,9 @@ export default function CryptoAgentPage() {
             color={isRunning ? 'green' : 'default'}
             style={{ fontSize: 13, padding: '2px 12px' }}
           >
-            {isRunning ? 'AGENT RUNNING' : store.agentState?.status?.toUpperCase() ?? 'IDLE'}
+            {isRunning
+              ? `AGENT RUNNING${store.agentState?.personality ? ` — ${store.agentState.personality.charAt(0).toUpperCase() + store.agentState.personality.slice(1)}` : ''}`
+              : store.agentState?.status?.toUpperCase() ?? 'IDLE'}
           </Tag>
         </div>
       </div>

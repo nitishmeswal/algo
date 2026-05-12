@@ -1,5 +1,6 @@
 import { getSupabase } from '../db/supabase/client.js'
 import { persistError } from '../db/supabase/persistence.js'
+import { recordOutcome } from './confidenceCalibrator.js'
 
 /**
  * Signal Validator — checks whether BUY/SELL decisions were correct after the fact.
@@ -85,6 +86,9 @@ export async function checkPendingValidations(
 
     totalValidated++
     if (signalCorrect) totalCorrect++
+
+    // Feed outcome into confidence calibrator
+    recordOutcome(signalCorrect)
 
     const result: ValidationResult = {
       trade_id: v.tradeId,
