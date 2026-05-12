@@ -108,6 +108,14 @@ function getEffectiveConfidenceThreshold(): number {
   return activePersonality?.confidenceThreshold ?? 65
 }
 
+function getEffectiveStopLossPct(): number {
+  return activePersonality?.stopLossPct ?? currentSettings.stopLossPct
+}
+
+function getEffectiveTakeProfitPct(): number {
+  return activePersonality?.takeProfitPct ?? currentSettings.takeProfitPct
+}
+
 export function getActivePersonality(): PersonalityPreset | null {
   return activePersonality
 }
@@ -198,8 +206,8 @@ PORTFOLIO:
 - Available cash: $${balanceUSDT.toFixed(2)}
 - Currently holding: ${hasPosition ? 'YES' : 'NO'}${hasPosition ? `\n- Position cost: $${positionCostUSDT.toFixed(2)}` : ''}${hasPosition ? `\n- Position P&L: ${positionPnlPct.toFixed(2)}%` : ''}${hasPosition ? `\n- Current exposure: ${exposurePct.toFixed(0)}% of portfolio` : ''}
 - Max trade size available: $${maxTradeSize.toFixed(2)}
-- Stop loss: -${currentSettings.stopLossPct}%
-- Take profit: +${currentSettings.takeProfitPct}%
+- Stop loss: -${getEffectiveStopLossPct()}%
+- Take profit: +${getEffectiveTakeProfitPct()}%
 ${hasPosition ? '- You CAN add to position if signals are strong (scale in).' : ''}
 Provide your trading decision now.`
 }
@@ -358,7 +366,7 @@ async function runOneCycle(): Promise<AgentDecision | null> {
 
     // Check stop-loss / take-profit
     if (hasPosition && position) {
-      if (positionPnlPct <= -currentSettings.stopLossPct) {
+      if (positionPnlPct <= -getEffectiveStopLossPct()) {
         const sellAmount = position.quantity * ticker.price
         await executeTrade(
           symbol, 'sell', sellAmount, agentState.activeModel, `Stop-loss triggered at ${positionPnlPct.toFixed(2)}%`, 95,
@@ -366,7 +374,7 @@ async function runOneCycle(): Promise<AgentDecision | null> {
         const decision: AgentDecision = {
           action: 'sell',
           confidence: 95,
-          reasoning: `Stop-loss triggered: P&L ${positionPnlPct.toFixed(2)}% exceeded -${currentSettings.stopLossPct}% threshold`,
+          reasoning: `Stop-loss triggered: P&L ${positionPnlPct.toFixed(2)}% exceeded -${getEffectiveStopLossPct()}% threshold`,
           model: agentState.activeModel,
           indicators: flatIndicators(indicators),
           ts: Date.now(),
@@ -378,7 +386,7 @@ async function runOneCycle(): Promise<AgentDecision | null> {
         consecutiveErrors = 0
         return decision
       }
-      if (positionPnlPct >= currentSettings.takeProfitPct) {
+      if (positionPnlPct >= getEffectiveTakeProfitPct()) {
         const sellAmount = position.quantity * ticker.price
         await executeTrade(
           symbol, 'sell', sellAmount, agentState.activeModel, `Take-profit triggered at ${positionPnlPct.toFixed(2)}%`, 95,
@@ -386,7 +394,7 @@ async function runOneCycle(): Promise<AgentDecision | null> {
         const decision: AgentDecision = {
           action: 'sell',
           confidence: 95,
-          reasoning: `Take-profit triggered: P&L ${positionPnlPct.toFixed(2)}% exceeded +${currentSettings.takeProfitPct}% threshold`,
+          reasoning: `Take-profit triggered: P&L ${positionPnlPct.toFixed(2)}% exceeded +${getEffectiveTakeProfitPct()}% threshold`,
           model: agentState.activeModel,
           indicators: flatIndicators(indicators),
           ts: Date.now(),
@@ -639,9 +647,6 @@ export async function startAgent(
   // Set personality
   if (personality) {
     activePersonality = getPersonalityPreset(personality)
-    // Apply personality risk settings
-    currentSettings.stopLossPct = activePersonality.stopLossPct
-    currentSettings.takeProfitPct = activePersonality.takeProfitPct
     console.log(`[agent] Personality: ${activePersonality.emoji} ${activePersonality.name} — ${activePersonality.description}`)
   } else {
     activePersonality = null
@@ -669,6 +674,7 @@ export async function startAgent(
   agentState.cycleCount = 0
   agentState.decisionHistory = []
   consecutiveErrors = 0
+  resetCalibration()
   markSessionStart()
   if (symbol) agentState.symbol = symbol
   agentState.portfolio = getPaperPortfolio()
