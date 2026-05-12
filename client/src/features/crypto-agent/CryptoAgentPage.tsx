@@ -149,8 +149,33 @@ export default function CryptoAgentPage() {
 
       {store.error && (
         <Alert
-          type="error"
-          message={store.error}
+          type={store.error.includes('Cannot connect') || store.error.includes('not found') ? 'warning' : 'error'}
+          message={
+            store.error.includes('Cannot connect') || store.error.includes('not found')
+              ? 'Backend Server Not Running'
+              : 'Error'
+          }
+          description={
+            store.error.includes('Cannot connect') || store.error.includes('not found')
+              ? (
+                <div>
+                  <p style={{ margin: '4px 0' }}>{store.error}</p>
+                  <p style={{ margin: '4px 0', color: '#888' }}>
+                    The agent page requires the backend server. Open a terminal and run:
+                  </p>
+                  <code style={{ display: 'block', background: '#1a1a2e', padding: '8px 12px', borderRadius: 4, margin: '8px 0', color: '#10b981' }}>
+                    cd server && npm install && npm run dev
+                  </code>
+                  <p style={{ margin: '4px 0', color: '#888' }}>
+                    Then open another terminal for the frontend:
+                  </p>
+                  <code style={{ display: 'block', background: '#1a1a2e', padding: '8px 12px', borderRadius: 4, margin: '8px 0', color: '#10b981' }}>
+                    npm run dev
+                  </code>
+                </div>
+              )
+              : store.error
+          }
           closable
           onClose={store.clearError}
           style={{ marginBottom: 16 }}
@@ -170,74 +195,68 @@ export default function CryptoAgentPage() {
         size="small"
         style={{ marginBottom: 16, background: '#111118', border: '1px solid #1f1f2e' }}
       >
-        <Row gutter={16} align="middle">
-          <Col>
-            <Space>
-              <Select
-                value={selectedSymbol}
-                onChange={async (v) => {
-                  setSelectedSymbol(v)
-                  await Promise.all([
-                    store.fetchTicker(v),
-                    store.fetchCandles(v),
-                    store.fetchIndicators(v),
-                  ])
-                }}
-                style={{ width: 140 }}
-                options={SYMBOLS.map((s) => ({ label: s, value: s }))}
-              />
-              <Select
-                value={selectedModel}
-                onChange={(v) => setSelectedModel(v)}
-                style={{ width: 200 }}
-                options={Object.entries(MODEL_LABELS).map(([k, v]) => ({
-                  label: v,
-                  value: k,
-                  disabled: store.availableModels.length > 0 && !store.availableModels.includes(k as AiModel),
-                }))}
-              />
-              <Radio.Group value={selectedMode} onChange={(e) => setSelectedMode(e.target.value)}>
-                <Radio.Button value="paper">Paper</Radio.Button>
-                <Radio.Button value="live">Live</Radio.Button>
-              </Radio.Group>
-              <InputNumber
-                prefix="$"
-                value={initialBalance}
-                min={1}
-                max={1000}
-                onChange={(v) => setInitialBalance(v ?? 10)}
-                style={{ width: 100 }}
-              />
-            </Space>
-          </Col>
-          <Col flex="auto" />
-          <Col>
-            <Space>
-              {isRunning ? (
-                <Button danger icon={<Pause size={14} />} onClick={handleStop}>
-                  Stop Agent
-                </Button>
-              ) : (
-                <Button
-                  type="primary"
-                  icon={<Play size={14} />}
-                  onClick={handleStart}
-                  loading={store.loading}
-                >
-                  Start Agent
-                </Button>
-              )}
-              <Tag color={isRunning ? 'green' : 'default'}>
-                {store.agentState?.status?.toUpperCase() ?? 'IDLE'}
-              </Tag>
-            </Space>
-          </Col>
-        </Row>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+          <Select
+            value={selectedSymbol}
+            onChange={async (v) => {
+              setSelectedSymbol(v)
+              await Promise.all([
+                store.fetchTicker(v),
+                store.fetchCandles(v),
+                store.fetchIndicators(v),
+              ])
+            }}
+            style={{ width: 140 }}
+            options={SYMBOLS.map((s) => ({ label: s, value: s }))}
+          />
+          <Select
+            value={selectedModel}
+            onChange={(v) => setSelectedModel(v)}
+            style={{ width: 200 }}
+            options={Object.entries(MODEL_LABELS).map(([k, v]) => ({
+              label: v,
+              value: k,
+              disabled: store.availableModels.length > 0 && !store.availableModels.includes(k as AiModel),
+            }))}
+          />
+          <Radio.Group value={selectedMode} onChange={(e) => setSelectedMode(e.target.value)}>
+            <Radio.Button value="paper">Paper</Radio.Button>
+            <Radio.Button value="live">Live</Radio.Button>
+          </Radio.Group>
+          <InputNumber
+            prefix="$"
+            value={initialBalance}
+            min={1}
+            max={1000}
+            onChange={(v) => setInitialBalance(v ?? 10)}
+            style={{ width: 100 }}
+          />
+          <div style={{ flex: 1 }} />
+          <Space>
+            {isRunning ? (
+              <Button danger icon={<Pause size={14} />} onClick={handleStop}>
+                Stop Agent
+              </Button>
+            ) : (
+              <Button
+                type="primary"
+                icon={<Play size={14} />}
+                onClick={handleStart}
+                loading={store.loading}
+              >
+                Start Agent
+              </Button>
+            )}
+            <Tag color={isRunning ? 'green' : 'default'}>
+              {store.agentState?.status?.toUpperCase() ?? 'IDLE'}
+            </Tag>
+          </Space>
+        </div>
       </Card>
 
       {/* Stats Row */}
-      <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col span={4}>
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+        <Col xs={12} sm={8} md={4}>
           <Card size="small" style={{ background: '#111118', border: '1px solid #1f1f2e' }}>
             <Statistic
               title={<span style={{ color: '#888' }}>{selectedSymbol} Price</span>}
@@ -248,7 +267,7 @@ export default function CryptoAgentPage() {
             />
           </Card>
         </Col>
-        <Col span={4}>
+        <Col xs={12} sm={8} md={4}>
           <Card size="small" style={{ background: '#111118', border: '1px solid #1f1f2e' }}>
             <Statistic
               title={<span style={{ color: '#888' }}>24h Change</span>}
@@ -263,7 +282,7 @@ export default function CryptoAgentPage() {
             />
           </Card>
         </Col>
-        <Col span={4}>
+        <Col xs={12} sm={8} md={4}>
           <Card size="small" style={{ background: '#111118', border: '1px solid #1f1f2e' }}>
             <Statistic
               title={<span style={{ color: '#888' }}>Balance (USDT)</span>}
@@ -274,7 +293,7 @@ export default function CryptoAgentPage() {
             />
           </Card>
         </Col>
-        <Col span={4}>
+        <Col xs={12} sm={8} md={4}>
           <Card size="small" style={{ background: '#111118', border: '1px solid #1f1f2e' }}>
             <Statistic
               title={<span style={{ color: '#888' }}>Total P&amp;L</span>}
@@ -288,7 +307,7 @@ export default function CryptoAgentPage() {
             />
           </Card>
         </Col>
-        <Col span={4}>
+        <Col xs={12} sm={8} md={4}>
           <Card size="small" style={{ background: '#111118', border: '1px solid #1f1f2e' }}>
             <Statistic
               title={<span style={{ color: '#888' }}>Win Rate</span>}
@@ -299,7 +318,7 @@ export default function CryptoAgentPage() {
             />
           </Card>
         </Col>
-        <Col span={4}>
+        <Col xs={12} sm={8} md={4}>
           <Card size="small" style={{ background: '#111118', border: '1px solid #1f1f2e' }}>
             <Statistic
               title={<span style={{ color: '#888' }}>Trades</span>}
@@ -315,9 +334,9 @@ export default function CryptoAgentPage() {
         </Col>
       </Row>
 
-      <Row gutter={16}>
+      <Row gutter={[16, 16]}>
         {/* Left: Candle Chart + Indicators */}
-        <Col span={16}>
+        <Col xs={24} lg={16}>
           <Card
             title={<span style={{ color: '#fff' }}>Price Chart — {selectedSymbol}</span>}
             size="small"
@@ -337,7 +356,7 @@ export default function CryptoAgentPage() {
         </Col>
 
         {/* Right: AI Reasoning + Positions */}
-        <Col span={8}>
+        <Col xs={24} lg={8}>
           {/* AI Decision */}
           <Card
             title={
