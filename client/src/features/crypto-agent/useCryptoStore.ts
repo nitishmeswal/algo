@@ -46,10 +46,22 @@ type CryptoStore = {
 }
 
 async function apiFetch<T>(url: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
-    ...opts,
-  })
+  let res: Response
+  try {
+    res = await fetch(url, {
+      headers: { 'Content-Type': 'application/json' },
+      ...opts,
+    })
+  } catch {
+    throw new Error(
+      'Cannot connect to backend server. Run "cd server && npm run dev" first, then refresh.',
+    )
+  }
+  if (res.headers.get('content-type')?.includes('text/html')) {
+    throw new Error(
+      'Backend server not found — got HTML instead of JSON. Make sure the server is running on port 8000.',
+    )
+  }
   const data = await res.json()
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
   return data as T
