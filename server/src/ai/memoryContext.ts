@@ -11,8 +11,11 @@ export async function buildMemoryContext(
   ])
 
   if (recentTrades.length === 0 && recentCycles.length === 0) {
+    console.log('[memory] No history found — first cycle (stateless)')
     return '' // No history yet
   }
+
+  console.log(`[memory] Retrieved ${recentTrades.length} trades, ${recentCycles.length} cycles for ${symbol}/${model}`)
 
   const parts: string[] = []
 
@@ -58,5 +61,10 @@ ${tradeLines.join('\n')}`)
     }
   }
 
-  return parts.length > 0 ? '\n\n' + parts.join('\n\n') : ''
+  if (parts.length > 0) {
+    const contextSize = parts.join('\n\n').length
+    console.log(`[memory] ✓ Injected ${parts.length} memory sections (${contextSize} chars) into prompt`)
+    return '\n\n' + parts.join('\n\n')
+  }
+  return ''
 }
