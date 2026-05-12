@@ -26,6 +26,8 @@ import {
   type PerformanceRow,
 } from '../db/supabase/persistence.js'
 import { isSupabaseEnabled } from '../db/supabase/client.js'
+import { registerTradeForValidation, checkPendingValidations } from './signalValidator.js'
+import { markSessionStart, recordCycleSuccess, recordCycleError } from './sessionHealth.js'
 
 const LLM_TIMEOUT_MS = 30_000
 const MAX_CONSECUTIVE_ERRORS = 5
@@ -208,6 +210,7 @@ async function executeTrade(
   amountUSDT: number,
   model: string,
   reasoning: string,
+  confidence = 0,
 ) {
   let result: { price?: number; quantity?: number; fee?: number; pnl?: number } | undefined
 
@@ -259,6 +262,12 @@ async function executeTrade(
       balance_after: updatedPortfolio.balanceUSDT,
     }
     persistTrade(tradeRow).catch(() => {})
+
+    // Register for signal validation
+    registerTradeForValidation(
+      tradeRow.ts, symbol, model, side,
+      result.price ?? 0, confidence, reasoning, agentState.cycleCount,
+    )
   }
 
   return result
@@ -275,6 +284,11 @@ async function runOneCycle(): Promise<AgentDecision | null> {
       fetchCandles(symbol, agentState.interval, 100),
     ])
 
+    // Check pending signal validations with current price
+    await checkPendingValidations(ticker.price, agentState.cycleCount).catch((e) =>
+      console.warn('[validator] check failed:', e instanceof Error ? e.message : e),
+    )
+
     const indicators = computeIndicators(candles)
     const portfolio = getPaperPortfolio()
     const position = portfolio.positions.find((p) => p.symbol === symbol)
@@ -288,7 +302,7 @@ async function runOneCycle(): Promise<AgentDecision | null> {
       if (positionPnlPct <= -currentSettings.stopLossPct) {
         const sellAmount = position.quantity * ticker.price
         await executeTrade(
-          symbol, 'sell', sellAmount, agentState.activeModel, `Stop-loss triggered at ${positionPnlPct.toFixed(2)}%`,
+          symbol, 'sell', sellAmount, agentState.activeModel, `Stop-loss triggered at ${positionPnlPct.toFixed(2)}%`, 95,
         )
         const decision: AgentDecision = {
           action: 'sell',
@@ -308,7 +322,7 @@ async function runOneCycle(): Promise<AgentDecision | null> {
       if (positionPnlPct >= currentSettings.takeProfitPct) {
         const sellAmount = position.quantity * ticker.price
         await executeTrade(
-          symbol, 'sell', sellAmount, agentState.activeModel, `Take-profit triggered at ${positionPnlPct.toFixed(2)}%`,
+          symbol, 'sell', sellAmount, agentState.activeModel, `Take-profit triggered at ${positionPnlPct.toFixed(2)}%`, 95,
         )
         const decision: AgentDecision = {
           action: 'sell',
@@ -384,7 +398,7 @@ async function runOneCycle(): Promise<AgentDecision | null> {
       const tradeAmount = Math.min(currentSettings.maxPositionUSDT, portfolio.balanceUSDT * 0.95)
       if (tradeAmount >= 1) {
         try {
-          await executeTrade(symbol, 'buy', tradeAmount, agentState.activeModel, decision.reasoning)
+          await executeTrade(symbol, 'buy', tradeAmount, agentState.activeModel, decision.reasoning, decision.confidence)
           console.log(`[agent] BUY executed — $${tradeAmount.toFixed(2)} at $${ticker.price.toFixed(2)}`)
         } catch (err) {
           console.error('[agent] Buy failed:', err)
@@ -398,7 +412,7 @@ async function runOneCycle(): Promise<AgentDecision | null> {
     } else if (decision.action === 'sell' && decision.confidence > 65 && hasPosition) {
       try {
         const sellAmount = position!.quantity * ticker.price
-        await executeTrade(symbol, 'sell', sellAmount, agentState.activeModel, decision.reasoning)
+        await executeTrade(symbol, 'sell', sellAmount, agentState.activeModel, decision.reasoning, decision.confidence)
         console.log(`[agent] SELL executed at $${ticker.price.toFixed(2)}`)
       } catch (err) {
         console.error('[agent] Sell failed:', err)
@@ -418,6 +432,7 @@ async function runOneCycle(): Promise<AgentDecision | null> {
     consecutiveErrors = 0
 
     console.log(`[agent] Cycle #${agentState.cycleCount}: ${decision.action.toUpperCase()} (${decision.confidence}%) — ${decision.reasoning}`)
+    recordCycleSuccess(latencyMs)
 
     // --- Persist to Supabase ---
     const updatedPortfolio = getPaperPortfolio()
@@ -468,12 +483,25 @@ async function runOneCycle(): Promise<AgentDecision | null> {
     agentState.error = msg
     consecutiveErrors++
 
+    // Classify error with fine-grained types
+    let errorType = 'runtime'
+    if (msg.includes('timeout')) errorType = 'timeout'
+    else if (msg.includes('parse') || msg.includes('JSON')) errorType = 'parse'
+    else if (msg.includes('empty response')) errorType = 'empty_response'
+    else if (msg.includes('not found') && msg.includes('model')) errorType = 'model_not_found'
+    else if (msg.includes('NetworkError') || msg.includes('ECONNREFUSED') || msg.includes('fetch failed')) errorType = 'network'
+    else if (msg.includes('exchange') || msg.includes('Exchange')) errorType = 'exchange'
+    else if (msg.includes('rate limit') || msg.includes('429')) errorType = 'rate_limit'
+    else if (msg.includes('API key') || msg.includes('Unauthorized') || msg.includes('401')) errorType = 'auth'
+
+    recordCycleError(errorType, msg)
+
     // Persist error to Supabase
     persistError({
       ts: new Date().toISOString(),
       symbol: agentState.symbol,
       model: agentState.activeModel,
-      error_type: msg.includes('timeout') ? 'timeout' : msg.includes('parse') ? 'parse' : 'runtime',
+      error_type: errorType,
       error_message: msg,
       cycle_count: agentState.cycleCount,
     }).catch(() => {})
@@ -524,6 +552,7 @@ export async function startAgent(
   agentState.cycleCount = 0
   agentState.decisionHistory = []
   consecutiveErrors = 0
+  markSessionStart()
   if (symbol) agentState.symbol = symbol
   agentState.portfolio = getPaperPortfolio()
 
