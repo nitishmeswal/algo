@@ -78,6 +78,9 @@ server.listen(PORT, () => {
     getSupabase()
     console.log(`  DB   Supabase persistence enabled (cycles, trades, metrics stored)`)
     console.log(`  API  http://localhost:${PORT}/crypto/metrics/:symbol`)
+    console.log(`  API  http://localhost:${PORT}/crypto/health`)
+    console.log(`  API  http://localhost:${PORT}/crypto/validation/stats`)
+    console.log(`  API  http://localhost:${PORT}/crypto/validation/history`)
   } else {
     console.log(`  [!]  SUPABASE_URL not set — persistence disabled. Agent still works but no history stored.`)
   }

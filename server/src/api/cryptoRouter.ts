@@ -19,6 +19,8 @@ import {
   getTotalCycleCount,
 } from '../db/supabase/persistence.js'
 import { isSupabaseEnabled, checkTablesExist } from '../db/supabase/client.js'
+import { getSessionHealth } from '../ai/sessionHealth.js'
+import { getValidationStats, getValidationHistory } from '../ai/signalValidator.js'
 
 export const cryptoRouter = Router()
 
@@ -242,6 +244,32 @@ cryptoRouter.get('/history/cycles', async (req: Request, res: Response) => {
     const limit = Math.min(Number(req.query.limit) || 50, 200)
     const cycles = await getRecentCycles(symbol, limit)
     res.json({ enabled: true, cycles })
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+// ── Session Health & Signal Validation ───────────────────────────────────────
+
+cryptoRouter.get('/health', async (_req: Request, res: Response) => {
+  try {
+    const health = await getSessionHealth()
+    res.json(health)
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+cryptoRouter.get('/validation/stats', (_req: Request, res: Response) => {
+  res.json(getValidationStats())
+})
+
+cryptoRouter.get('/validation/history', async (req: Request, res: Response) => {
+  try {
+    const symbol = (req.query.symbol as string) || 'BTC/USDT'
+    const limit = Math.min(Number(req.query.limit) || 50, 200)
+    const history = await getValidationHistory(symbol, limit)
+    res.json({ validations: history, stats: getValidationStats() })
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
   }
