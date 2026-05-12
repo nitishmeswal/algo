@@ -187,12 +187,53 @@ export default function CryptoAgentPage() {
         />
       )}
 
+      {/* Big Start/Stop Button */}
+      <div style={{ textAlign: 'center', marginBottom: 20 }}>
+        <style>{`
+          @keyframes pulse-ring { 0% { transform: scale(1); opacity: 0.6; } 100% { transform: scale(1.4); opacity: 0; } }
+          @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 20px rgba(16,185,129,0.4); } 50% { box-shadow: 0 0 40px rgba(16,185,129,0.8); } }
+          .agent-btn-wrap { position: relative; display: inline-block; }
+          .agent-btn-wrap .pulse-ring { position: absolute; inset: -8px; border-radius: 50%; border: 3px solid #10b981; animation: pulse-ring 1.5s ease-out infinite; pointer-events: none; }
+          .agent-btn-running { animation: pulse-glow 2s ease-in-out infinite; }
+        `}</style>
+        <div className="agent-btn-wrap">
+          {isRunning && <div className="pulse-ring" />}
+          <button
+            onClick={isRunning ? handleStop : handleStart}
+            disabled={store.loading}
+            className={isRunning ? 'agent-btn-running' : ''}
+            style={{
+              width: 120, height: 120, borderRadius: '50%', border: 'none', cursor: 'pointer',
+              background: isRunning
+                ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
+                : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              color: '#fff', fontSize: 16, fontWeight: 700, display: 'flex', alignItems: 'center',
+              justifyContent: 'center', flexDirection: 'column', gap: 4, transition: 'all 0.3s ease',
+              boxShadow: isRunning ? '0 0 30px rgba(239,68,68,0.4)' : '0 0 30px rgba(16,185,129,0.3)',
+            }}
+          >
+            {isRunning ? <Pause size={28} /> : <Play size={28} style={{ marginLeft: 4 }} />}
+            <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 }}>
+              {store.loading ? 'Starting...' : isRunning ? 'Stop' : 'Start'}
+            </span>
+          </button>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <Tag
+            color={isRunning ? 'green' : 'default'}
+            style={{ fontSize: 13, padding: '2px 12px' }}
+          >
+            {isRunning ? 'AGENT RUNNING' : store.agentState?.status?.toUpperCase() ?? 'IDLE'}
+          </Tag>
+        </div>
+      </div>
+
       {/* Agent Controls */}
       <Card
         size="small"
         style={{ marginBottom: 16, background: '#111118', border: '1px solid #1f1f2e' }}
       >
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', justifyContent: 'center' }}>
           <Select
             value={selectedSymbol}
             onChange={async (v) => {
@@ -216,38 +257,29 @@ export default function CryptoAgentPage() {
               disabled: store.availableModels.length > 0 && !store.availableModels.includes(k as AiModel),
             }))}
           />
-          <Radio.Group value={selectedMode} onChange={(e) => setSelectedMode(e.target.value)}>
-            <Radio.Button value="paper">Paper</Radio.Button>
-            <Radio.Button value="live">Live</Radio.Button>
-          </Radio.Group>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+            <Radio.Group value={selectedMode} onChange={(e) => setSelectedMode(e.target.value)}>
+              <Radio.Button value="paper" style={selectedMode === 'paper' ? { background: '#1a5c3a', borderColor: '#10b981', color: '#10b981' } : {}}>
+                Paper
+              </Radio.Button>
+              <Radio.Button value="live" style={selectedMode === 'live' ? { background: '#5c1a1a', borderColor: '#ef4444', color: '#ef4444' } : {}}>
+                Live
+              </Radio.Button>
+            </Radio.Group>
+            <span style={{ fontSize: 11, color: '#888' }}>
+              {selectedMode === 'paper'
+                ? 'Simulated — no real money'
+                : 'Real orders — real money'}
+            </span>
+          </div>
           <InputNumber
             prefix="$"
             value={initialBalance}
             min={1}
-            max={1000}
+            max={100000}
             onChange={(v) => setInitialBalance(v ?? 10)}
-            style={{ width: 100 }}
+            style={{ width: 110 }}
           />
-          <div style={{ flex: 1 }} />
-          <Space>
-            {isRunning ? (
-              <Button danger icon={<Pause size={14} />} onClick={handleStop}>
-                Stop Agent
-              </Button>
-            ) : (
-              <Button
-                type="primary"
-                icon={<Play size={14} />}
-                onClick={handleStart}
-                loading={store.loading}
-              >
-                Start Agent
-              </Button>
-            )}
-            <Tag color={isRunning ? 'green' : 'default'}>
-              {store.agentState?.status?.toUpperCase() ?? 'IDLE'}
-            </Tag>
-          </Space>
         </div>
       </Card>
 
